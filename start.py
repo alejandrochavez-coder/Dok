@@ -9,10 +9,25 @@ class VulkanApi(Enum):
     VULKAN = "vulkan"
     VULKAN_SC = "vulkansc"
 
+class RequirementJoint(Enum):
+    AND = "+"
+    OR = ","
+
+class CommandType(Enum):
+    Global = "GLOBAL"
+    Instance = "INSTANCE"
+    Device = "DEVICE"
+
 @dataclass
 class FeatureEntry:
     requirement: str
     command: str
+
+@dataclass
+class CommandEntry:
+    requirement: str
+    command: str
+    command_type: CommandType
 
 VULKAN_URL = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml"
 
@@ -20,7 +35,7 @@ def get_registry() -> etree.ElementTree:
     with urllib.request.urlopen(VULKAN_URL) as file:
         return etree.parse(file)
 
-def parse_entries(commands: list[etree.Element[str]], requirement: str) -> list[FeatureEntry]:
+def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> list[FeatureEntry]:
 
     entries: list[FeatureEntry] = []
 
@@ -45,37 +60,54 @@ def parse_feature_entries(registry: etree.ElementTree, api: VulkanApi) -> list[F
         requirement = re.sub(r"VK_(BASE|COMPUTE|GRAPHICS)_VERSION_", "VK_VERSION_", feature.get("name"))
 
         commands = feature.findall("require/command")
-        entries.extend(parse_entries(commands, requirement))
+        entries.extend(parse_tree_entries(commands, requirement))
 
     return entries
 
-# def join_requirements(a: str, b: str) -> str:
-#     if not b:
-#         return a
-    
-#     if "," in a:
-#         a = f"({a})"
-
-#     if "," in b:
-#         b = f"({b})"
-
-#     return f"{a}+{b}"
-
-def join_requirements(requirements: list[str]) -> str:
+def join_requirements(requirements: list[str], joint: RequirementJoint) -> str:
 
     valid_requirements: list[str] = []
+
+    contrary_joint = RequirementJoint.AND
+    if joint == contrary_joint:
+        contrary_joint = RequirementJoint.OR
 
     for requirement in requirements:
 
         if not requirement:
             continue
 
-        if "," in requirement:
+        if contrary_joint.value in requirement:
             valid_requirements.append(f"({requirement})")
+
         else:
+
             valid_requirements.append(requirement)
 
-    return "+".join(valid_requirements)        
+    return joint.value.join(valid_requirements)
+
+def parse_spec_dependency(require: etree.Element[str], author: str) -> str:
+
+    if author == "KHR":
+        return ""
+
+    spec = require.find("enum")
+    if spec is None:
+        return ""
+
+    spec_name = spec.get("name", "")
+    if not spec_name:
+        return ""
+    
+    spec_version = spec.get("value", "")
+    if not spec_version:
+        return ""
+    
+    if int(spec_version) > 0:
+        return ""
+    
+    return f"{spec_name} >= {spec_version}"
+
 
 def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list[FeatureEntry]:
     entries: list[FeatureEntry] = []
@@ -86,16 +118,17 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
             continue
 
         extension_name = extension.get("name")
-        extension_dependencies = extension.get("depends")
+        extension_author = extension.get("author")
 
         for require in extension.findall("require"):
 
             command_dependencies = require.get("depends", "")
+            spec_dependency = parse_spec_dependency(require, extension_author)
 
-            requirement = join_requirements([extension_name, extension_dependencies, command_dependencies])
+            requirement = join_requirements([extension_name, command_dependencies, spec_dependency], RequirementJoint.AND)
 
             commands = require.findall("command")
-            entries.extend(parse_entries(commands, requirement))
+            entries.extend(parse_tree_entries(commands, requirement))
 
     return entries
 
@@ -107,12 +140,13 @@ def parse_requirement(requirement: str) -> str:
     for index, char in enumerate(requirement):
 
         last = index == len(requirement) - 1
+        enum = "=" in buffer
         symbol = char in "()+,"
 
         if not symbol:
             buffer += char
 
-        if buffer and symbol or last and not symbol:
+        if buffer and symbol or (last and not symbol) and not enum:
             parsed += f"defined({buffer})"
 
         if symbol and buffer:
@@ -123,18 +157,76 @@ def parse_requirement(requirement: str) -> str:
 
     return parsed.replace("+", " && ").replace(",", " || ")
 
+def get_raw_type_type(type: str, type_parents: dict[str, str | None]) -> CommandType:
+    while type:
+        if type == "VkInstance":
+            return CommandType.Instance
+        
+        if type == "VkDevice":
+            return CommandType.Device
+        
+        type = type_parents.get(type)
+
+    return CommandType.Global
+
+def get_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
+    command_types: dict[str, CommandType] = {}
+    type_parents: dict[str, str | None] = {}
+
+    for type in registry.findall("types/type"):
+        if type.get("category") == "handle" and (command_name := type.findtext("name")):
+            type_parents[command_name] = type.get("parent")
+
+    for command in registry.find("commands"):
+        alias = command.get("alias")
+        if alias:
+            command_types[command.get("name")] = command_types[alias]
+            continue
+
+        command_name = command.findtext("proto/name")
+        if command_name == "vkGetInstanceProcAddr":
+            command_types[command_name] = CommandType.Global
+            continue
+
+        if command_name == "vkGetDeviceProcAddr":
+            command_types[command_name] = CommandType.Instance
+            continue
+
+        type = command.findtext("param[1]/type")
+        command_type = get_raw_type_type(type, type_parents)
+
+        command_types[command_name] = command_type
+
+    return command_types
+
+def parse_command_entries(registry: etree.ElementTree, api: VulkanApi):
+
+    entries: list[CommandEntry] = []
+
+    command_requirements: dict[str, list[str]] = {}
+    command_types = get_command_types(registry)
+
+    for entry in parse_feature_entries(registry, api) + parse_extension_entries(registry, api):
+
+        command_requirements.setdefault(entry.command, []).append(entry.requirement)
+
+    for command, requirements in command_requirements.items():
+
+        requirement = requirements[0]
+        if len(requirements) != 1:
+            requirement = join_requirements(requirements, RequirementJoint.OR)
+
+        command_type = command_types[command]   
+        entries.append(CommandEntry(requirement, command, command_type))
+
+    return entries
+    
+
 def start(registry: etree.ElementTree, api: VulkanApi):
 
-    requirement_commands: dict[str, list[str]] = {}
-    
-    for entry in parse_extension_entries(registry, api):
-        requirement_commands.setdefault(entry.requirement, []).append(entry.command)
+    for entry in parse_command_entries(registry, api):
 
-    for requirement, commands in requirement_commands.items():
-        print(parse_requirement(requirement))
-        # print(", ".join(commands))
-        print()
-
+        print(f"{entry.command_type.name} {entry.command}")
+        
 registry = get_registry()
 start(registry, VulkanApi.VULKAN)
-# parse_extension_entries(registry, VulkanApi.VULKAN)
