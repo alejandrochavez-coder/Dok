@@ -20,6 +20,20 @@ def get_registry() -> etree.ElementTree:
     with urllib.request.urlopen(VULKAN_URL) as file:
         return etree.parse(file)
 
+def parse_entries(commands: list[etree.Element[str]], requirement: str) -> list[FeatureEntry]:
+
+    entries: list[FeatureEntry] = []
+
+    for command in commands:
+
+        command_name = command.get("name")
+        if not command_name:
+            continue
+
+        entries.append(FeatureEntry(requirement, command_name))
+
+    return entries
+
 def parse_feature_entries(registry: etree.ElementTree, api: VulkanApi) -> list[FeatureEntry]:
     entries: list[FeatureEntry] = []
 
@@ -30,24 +44,38 @@ def parse_feature_entries(registry: etree.ElementTree, api: VulkanApi) -> list[F
 
         requirement = re.sub(r"VK_(BASE|COMPUTE|GRAPHICS)_VERSION_", "VK_VERSION_", feature.get("name"))
 
-        for command in feature.findall("require/command"):
-
-            command_name = command.get("name")
-            entries.append(FeatureEntry(requirement, command_name))
+        commands = feature.findall("require/command")
+        entries.extend(parse_entries(commands, requirement))
 
     return entries
 
-def join_requirements(a: str, b: str) -> str:
-    if not b:
-        return a
+# def join_requirements(a: str, b: str) -> str:
+#     if not b:
+#         return a
     
-    if "," in a:
-        a = f"({a})"
+#     if "," in a:
+#         a = f"({a})"
 
-    if "," in b:
-        b = f"({b})"
+#     if "," in b:
+#         b = f"({b})"
 
-    return f"{a}+{b}"
+#     return f"{a}+{b}"
+
+def join_requirements(requirements: list[str]) -> str:
+
+    valid_requirements: list[str] = []
+
+    for requirement in requirements:
+
+        if not requirement:
+            continue
+
+        if "," in requirement:
+            valid_requirements.append(f"({requirement})")
+        else:
+            valid_requirements.append(requirement)
+
+    return "+".join(valid_requirements)        
 
 def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list[FeatureEntry]:
     entries: list[FeatureEntry] = []
@@ -58,22 +86,24 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
             continue
 
         extension_name = extension.get("name")
+        extension_dependencies = extension.get("depends")
 
         for require in extension.findall("require"):
 
-            dependencies = require.get("depends", "")
+            command_dependencies = require.get("depends", "")
 
-            requirement = join_requirements(extension_name, dependencies)
+            requirement = join_requirements([extension_name, extension_dependencies, command_dependencies])
 
-            print(requirement)
+            commands = require.findall("command")
+            entries.extend(parse_entries(commands, requirement))
 
-        
+    return entries
 
 def start(registry: etree.ElementTree, api: VulkanApi):
 
     requirement_commands: dict[str, list[str]] = {}
     
-    for entry in parse_feature_entries(registry, api):
+    for entry in parse_extension_entries(registry, api):
         requirement_commands.setdefault(entry.requirement, []).append(entry.command)
 
     for requirement, commands in requirement_commands.items():
@@ -82,5 +112,5 @@ def start(registry: etree.ElementTree, api: VulkanApi):
         print()
 
 registry = get_registry()
-# start(registry, VulkanApi.VULKAN)
-parse_extension_entries(registry, VulkanApi.VULKAN)
+start(registry, VulkanApi.VULKAN)
+# parse_extension_entries(registry, VulkanApi.VULKAN)
