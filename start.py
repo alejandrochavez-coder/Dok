@@ -99,6 +99,30 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
 
     return entries
 
+def parse_requirement(requirement: str) -> str:
+
+    buffer = ""
+    parsed = ""
+
+    for index, char in enumerate(requirement):
+
+        last = index == len(requirement) - 1
+        symbol = char in "()+,"
+
+        if not symbol:
+            buffer += char
+
+        if buffer and symbol or last and not symbol:
+            parsed += f"defined({buffer})"
+
+        if symbol and buffer:
+            buffer = ""
+
+        if symbol:
+            parsed += char
+
+    return parsed.replace("+", " && ").replace(",", " || ")
+
 def start(registry: etree.ElementTree, api: VulkanApi):
 
     requirement_commands: dict[str, list[str]] = {}
@@ -107,8 +131,8 @@ def start(registry: etree.ElementTree, api: VulkanApi):
         requirement_commands.setdefault(entry.requirement, []).append(entry.command)
 
     for requirement, commands in requirement_commands.items():
-        print(requirement)
-        print(", ".join(commands))
+        print(parse_requirement(requirement))
+        # print(", ".join(commands))
         print()
 
 registry = get_registry()
