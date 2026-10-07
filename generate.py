@@ -168,9 +168,9 @@ def patch_file(name: str, block_data: dict[str, str]):
     patched_data: list[str] = []
     for data in unpatched_data:
         patched_data.append(data)
-        if data.startswith("//DOK_START"):
-            key = data.removeprefix("//DOK_START_").strip()
-            patched_data.append(block_data.get(key, "") + "\n")
+        # if data.startswith("//DOK_START"):
+        #     key = data.removeprefix("//DOK_START_").strip()
+        #     patched_data.append(block_data.get(key, "") + "\n")
 
     with open(name, "w") as file:
         file.write("".join(patched_data))

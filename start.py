@@ -1,9 +1,8 @@
 import xml.etree.ElementTree as etree
 from dataclasses import dataclass
-from typing import Callable
+from pathlib import Path
 from enum import Enum
 import urllib.request
-import re
 
 class VulkanApi(Enum):
     VULKAN = "vulkan"
@@ -17,6 +16,16 @@ class CommandType(Enum):
     Global = "GLOBAL"
     Instance = "INSTANCE"
     Device = "DEVICE"
+
+@dataclass
+class Feature:
+    requirement: str
+    commands: list[str]
+
+@dataclass
+class HandleEntry:
+    type: CommandType
+    features: list[Feature]
 
 @dataclass
 class FeatureEntry:
@@ -42,9 +51,6 @@ def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> 
     for command in commands:
 
         command_name = command.get("name")
-        if not command_name:
-            continue
-
         entries.append(FeatureEntry(requirement, command_name))
 
     return entries
@@ -57,7 +63,9 @@ def parse_feature_entries(registry: etree.ElementTree, api: VulkanApi) -> list[F
         if api.value not in feature.get("api").split(","):
             continue
 
-        requirement = re.sub(r"VK_(BASE|COMPUTE|GRAPHICS)_VERSION_", "VK_VERSION_", feature.get("name"))
+        feature_name = feature.get("name")
+
+        requirement = feature_name.replace("BASE_", "").replace("COMPUTE_", "").replace("GRAPHICS_", "")
 
         commands = feature.findall("require/command")
         entries.extend(parse_tree_entries(commands, requirement))
@@ -88,26 +96,17 @@ def join_requirements(requirements: list[str], joint: RequirementJoint) -> str:
 
 def parse_spec_dependency(require: etree.Element[str], author: str) -> str:
 
-    if author == "KHR":
-        return ""
-
     spec = require.find("enum")
-    if spec is None:
-        return ""
+    if author == "KHR" or spec is None:
+        return ""   
 
-    spec_name = spec.get("name", "")
-    if not spec_name:
-        return ""
-    
     spec_version = spec.get("value", "")
-    if not spec_version:
-        return ""
-    
-    if int(spec_version) > 0:
-        return ""
-    
-    return f"{spec_name} >= {spec_version}"
+    spec_name = spec.get("name", "")
 
+    if spec_name and spec_version and int(spec_version) > 1:
+        return f"{spec_name} >= {spec_version}"
+
+    return ""
 
 def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list[FeatureEntry]:
     entries: list[FeatureEntry] = []
@@ -146,7 +145,7 @@ def parse_requirement(requirement: str) -> str:
         if not symbol:
             buffer += char
 
-        if buffer and symbol or (last and not symbol) and not enum:
+        if symbol and buffer or last and not symbol and not enum:
             parsed += f"defined({buffer})"
 
         if symbol and buffer:
@@ -157,7 +156,7 @@ def parse_requirement(requirement: str) -> str:
 
     return parsed.replace("+", " && ").replace(",", " || ")
 
-def get_raw_type_type(type: str, type_parents: dict[str, str | None]) -> CommandType:
+def get_command_type(type: str, type_parents: dict[str, str | None]) -> CommandType:
     while type:
         if type == "VkInstance":
             return CommandType.Instance
@@ -169,7 +168,7 @@ def get_raw_type_type(type: str, type_parents: dict[str, str | None]) -> Command
 
     return CommandType.Global
 
-def get_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
+def parse_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
     command_types: dict[str, CommandType] = {}
     type_parents: dict[str, str | None] = {}
 
@@ -193,7 +192,7 @@ def get_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
             continue
 
         type = command.findtext("param[1]/type")
-        command_type = get_raw_type_type(type, type_parents)
+        command_type = get_command_type(type, type_parents)
 
         command_types[command_name] = command_type
 
@@ -204,7 +203,7 @@ def parse_command_entries(registry: etree.ElementTree, api: VulkanApi):
     entries: list[CommandEntry] = []
 
     command_requirements: dict[str, list[str]] = {}
-    command_types = get_command_types(registry)
+    command_types = parse_command_types(registry)
 
     for entry in parse_feature_entries(registry, api) + parse_extension_entries(registry, api):
 
@@ -220,13 +219,58 @@ def parse_command_entries(registry: etree.ElementTree, api: VulkanApi):
         entries.append(CommandEntry(requirement, command, command_type))
 
     return entries
-    
 
-def start(registry: etree.ElementTree, api: VulkanApi):
+def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> list[HandleEntry]:
+    type_feature_entries: dict[CommandType, dict[str, list[str]]] = {}
 
     for entry in parse_command_entries(registry, api):
 
-        print(f"{entry.command_type.name} {entry.command}")
+        type_feature_entries.setdefault(entry.command_type, {}).setdefault(entry.requirement, []).append(entry.command)
+
+    entries: list[HandleEntry] = []
+
+    for type, feature_entries in type_feature_entries.items():
+
+        features: list[Feature] = []
+
+        for requirement, commands in feature_entries.items():
+
+            feature = Feature(requirement, commands)
+            features.append(feature)
+
+        entry = HandleEntry(type, features)
+        entries.append(entry)
+
+    return entries
+
+def start(registry: etree.ElementTree, api: VulkanApi, file_paths: list[Path]):
+
+    # for entry in parse_handle_entries(registry, api):
+
+    #     print(entry.type)
+
+    #     for feature in entry.features:
+
+    #         print(parse_requirement(feature.requirement))
+    #         print(",".join(feature.commands))
+    #         print()
+
+    for file_path in file_paths:
+
+        data = ""
+
+        with open(file_path, "r") as file:
+
+            data = "".join(file.readlines()).replace("//H", "//A")
+
+        with open(file_path, "w") as file:
+
+            file.write(data)
+
+        
         
 registry = get_registry()
-start(registry, VulkanApi.VULKAN)
+# source_file = Path(__file__).parent / "dok_unparched.c"
+header_file = Path(__file__).parent / "test.h"
+
+start(registry, VulkanApi.VULKAN, [header_file])
