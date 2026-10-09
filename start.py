@@ -18,6 +18,10 @@ class CommandType(Enum):
     Instance = "INSTANCE"
     Device = "DEVICE"
 
+class TokenType(Enum):
+    ATOM = auto()
+    SYMBOL = auto()
+
 @dataclass
 class Feature:
     requirement: str
@@ -27,6 +31,11 @@ class Feature:
 class HandleEntry:
     type: CommandType
     features: list[Feature]
+
+@dataclass
+class Token:
+    type: TokenType
+    value: str
 
 @dataclass
 class FeatureEntry:
@@ -44,37 +53,6 @@ VULKAN_URL = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xm
 def get_registry() -> etree.ElementTree:
     with urllib.request.urlopen(VULKAN_URL) as file:
         return etree.parse(file)
-
-class TokenType(Enum):
-    ATOM = auto()
-    SYMBOL = auto()
-
-@dataclass
-class Token:
-    type: TokenType
-    value: str
-
-def tokenize(line: str, symbols: list[str]) -> list[Token]:
-
-    word_buffer = ""
-    tokenized: list[Token] = []
-
-    for index, char in enumerate(line):
-
-        last = index == len(line) - 1
-        symbol = char in symbols
-
-        if not symbol:
-            word_buffer += char
-
-        if symbol and word_buffer or last and not symbol:
-            tokenized.append(Token(TokenType.ATOM, word_buffer))
-            word_buffer = ""
-
-        if symbol:
-            tokenized.append(Token(TokenType.SYMBOL, char))
-
-    return tokenized
 
 def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> list[FeatureEntry]:
 
@@ -271,32 +249,104 @@ def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> list[Ha
 
     return entries
 
+def patch_file_data(lines: list[str]) -> list[str]:
+
+    patched: list[str] = []
+
+    for line in lines:
+
+        tokenized = tokenize(line, "{}/")
+
+        for token in tokenized:
+
+            patched.append(token.value)
+
+    return patched
+
+def patch_file_line(line: str) -> str:
+
+    tokenized = tokenize(line, "{}/")
+
+
+
+def patch_file(file_path: Path):
+    data = ""
+
+    with open(file_path, "r") as file:
+
+        for line in file.readlines():
+
+            data += patch_file_line(line)
+
+    print(data)
+
 def start(registry: etree.ElementTree, api: VulkanApi, file_paths: list[Path]):
 
-    for entry in parse_handle_entries(registry, api):
+    # for entry in parse_handle_entries(registry, api):
 
-        print(entry.type)
+    #     print(entry.type)
 
-        for feature in entry.features:
+    #     for feature in entry.features:
 
-            print(parse_requirement(feature.requirement))
-            # print(",".join(feature.commands))
-            # print()
+    #         print(parse_requirement(feature.requirement))
+    #         print(",".join(feature.commands))
+    #         print()
 
-    # for file_path in file_paths:
+    for file_path in file_paths:
 
-    #     data = ""
+        patch_file(file_path)
 
-    #     with open(file_path, "r") as file:
+def tokenize(line: str, symbols: list[str]) -> list[Token]:
 
-    #         data = "".join(file.readlines()).replace("//H", "//A")
+    symbol_buffer = ""
+    word_buffer = ""
 
-    #     with open(file_path, "w") as file:
+    tokenized: list[Token] = []
+    last_char = ""
 
-    #         file.write(data)
+    for index, char in enumerate(line):
+
+        last = index == len(line) - 1
+        symbol = char in symbols
+        changed = (last_char in symbols) != symbol
+
+        if changed and word_buffer:
+            tokenized.append(Token(TokenType.ATOM, word_buffer))
+            word_buffer = ""
+
+        if changed and symbol_buffer:
+            tokenized.append(Token(TokenType.SYMBOL, symbol_buffer))
+            symbol_buffer = ""
+
+        if symbol:
+            symbol_buffer += char
+        else:
+            word_buffer += char
+
+        if last and word_buffer:
+            tokenized.append(Token(TokenType.ATOM, word_buffer))
+
+        if last and symbol_buffer:
+            tokenized.append(Token(TokenType.SYMBOL, symbol_buffer))
+
+        last_char = char
+
+    return tokenized
+
+def isolate_token_values(tokenized: list[Token]) -> list[str]:
+
+    isolated: list[str] = []
+
+    for token in tokenized:
+        isolated.append(token.value)
+
+    return isolated
         
 registry = get_registry()
-source_file = Path(__file__).parent / "dok_unparched.c"
+# source_file = Path(__file__).parent / "dok_unparched.c"
 header_file = Path(__file__).parent / "test.h"
 
 start(registry, VulkanApi.VULKAN, [header_file])
+
+# print(isolate_token_values(tokenize("  //PEPE , sillo", string.punctuation + string.whitespace)))
+
