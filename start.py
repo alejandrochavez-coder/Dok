@@ -266,6 +266,15 @@ def patch_file_data(lines: list[str]) -> list[str]:
 def patch_file_line(line: str) -> str:
 
     tokenized = tokenize(line, "{}/")
+    patched = ""
+
+    for token in tokenized:
+
+        if token.type == TokenType.SYMBOL and token.value != "//":
+
+            return line
+
+        patched += token.value
 
 
 
