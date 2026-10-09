@@ -249,34 +249,24 @@ def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> list[Ha
 
     return entries
 
-def patch_file_data(lines: list[str]) -> list[str]:
-
-    patched: list[str] = []
-
-    for line in lines:
-
-        tokenized = tokenize(line, "{}/")
-
-        for token in tokenized:
-
-            patched.append(token.value)
-
-    return patched
-
 def patch_file_line(line: str) -> str:
 
-    tokenized = tokenize(line, "{}/")
+    tokenized = tokenize(line, "(){}/")
     patched = ""
+
+    first_symbol = find_first_token_type(tokenized, TokenType.SYMBOL)
+    if not first_symbol:
+        return line
+
+    if first_symbol.value != "//":
+        return line
 
     for token in tokenized:
 
-        if token.type == TokenType.SYMBOL and token.value != "//":
-
-            return line
-
-        patched += token.value
+        patched += f"({token.value})"
 
 
+    return patched
 
 def patch_file(file_path: Path):
     data = ""
@@ -350,6 +340,16 @@ def isolate_token_values(tokenized: list[Token]) -> list[str]:
         isolated.append(token.value)
 
     return isolated
+
+def find_first_token_type(tokens: list[Token], target: TokenType) -> Token | None:
+
+    for token in tokens:
+
+        if token.type == target:
+
+            return token
+
+    return None
         
 registry = get_registry()
 # source_file = Path(__file__).parent / "dok_unparched.c"
