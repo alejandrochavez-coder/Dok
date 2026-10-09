@@ -1,7 +1,8 @@
 import xml.etree.ElementTree as etree
 from dataclasses import dataclass
 from pathlib import Path
-from enum import Enum
+from enum import Enum, auto
+import string
 import urllib.request
 
 class VulkanApi(Enum):
@@ -43,6 +44,37 @@ VULKAN_URL = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xm
 def get_registry() -> etree.ElementTree:
     with urllib.request.urlopen(VULKAN_URL) as file:
         return etree.parse(file)
+
+class TokenType(Enum):
+    ATOM = auto()
+    SYMBOL = auto()
+
+@dataclass
+class Token:
+    type: TokenType
+    value: str
+
+def tokenize(line: str, symbols: list[str]) -> list[Token]:
+
+    word_buffer = ""
+    tokenized: list[Token] = []
+
+    for index, char in enumerate(line):
+
+        last = index == len(line) - 1
+        symbol = char in symbols
+
+        if not symbol:
+            word_buffer += char
+
+        if symbol and word_buffer or last and not symbol:
+            tokenized.append(Token(TokenType.ATOM, word_buffer))
+            word_buffer = ""
+
+        if symbol:
+            tokenized.append(Token(TokenType.SYMBOL, char))
+
+    return tokenized
 
 def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> list[FeatureEntry]:
 
@@ -133,26 +165,22 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
 
 def parse_requirement(requirement: str) -> str:
 
-    buffer = ""
+    tokenized: list[Token] = tokenize(requirement, "()+,")
     parsed = ""
 
-    for index, char in enumerate(requirement):
+    for token in tokenized:
 
-        last = index == len(requirement) - 1
-        enum = "=" in buffer
-        symbol = char in "()+,"
+        if token.type == TokenType.SYMBOL:
 
-        if not symbol:
-            buffer += char
+            parsed += token.value
+            continue
 
-        if symbol and buffer or last and not symbol and not enum:
-            parsed += f"defined({buffer})"
+        if "=" in token.value:
 
-        if symbol and buffer:
-            buffer = ""
+            parsed += f"({token.value})"
+            continue
 
-        if symbol:
-            parsed += char
+        parsed += f"defined({token.value})"
 
     return parsed.replace("+", " && ").replace(",", " || ")
 
@@ -245,32 +273,30 @@ def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> list[Ha
 
 def start(registry: etree.ElementTree, api: VulkanApi, file_paths: list[Path]):
 
-    # for entry in parse_handle_entries(registry, api):
+    for entry in parse_handle_entries(registry, api):
 
-    #     print(entry.type)
+        print(entry.type)
 
-    #     for feature in entry.features:
+        for feature in entry.features:
 
-    #         print(parse_requirement(feature.requirement))
-    #         print(",".join(feature.commands))
-    #         print()
+            print(parse_requirement(feature.requirement))
+            # print(",".join(feature.commands))
+            # print()
 
-    for file_path in file_paths:
+    # for file_path in file_paths:
 
-        data = ""
+    #     data = ""
 
-        with open(file_path, "r") as file:
+    #     with open(file_path, "r") as file:
 
-            data = "".join(file.readlines()).replace("//H", "//A")
+    #         data = "".join(file.readlines()).replace("//H", "//A")
 
-        with open(file_path, "w") as file:
+    #     with open(file_path, "w") as file:
 
-            file.write(data)
-
-        
+    #         file.write(data)
         
 registry = get_registry()
-# source_file = Path(__file__).parent / "dok_unparched.c"
+source_file = Path(__file__).parent / "dok_unparched.c"
 header_file = Path(__file__).parent / "test.h"
 
 start(registry, VulkanApi.VULKAN, [header_file])
