@@ -8,10 +8,6 @@ class VulkanApi(Enum):
     VULKAN = "vulkan"
     VULKAN_SC = "vulkansc"
 
-class RequirementJoint(Enum):
-    AND = "+"
-    OR = ","
-
 class CommandType(Enum):
     Global = "{Global}"
     Instance = "{Instance}"
@@ -23,14 +19,14 @@ class Feature:
     commands: list[str]
 
 @dataclass
-class FeatureEntry:
+class CommandEntry:
     requirement: str
     command: str
 
 @dataclass
-class CommandEntry:
-    requirement: str
-    command: str
+class ParseFile:
+    source: Path
+    target: Path
 
 VULKAN_URL = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml"
 
@@ -38,19 +34,19 @@ def get_registry() -> etree.ElementTree:
     with urllib.request.urlopen(VULKAN_URL) as file:
         return etree.parse(file)
 
-def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> list[FeatureEntry]:
+def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> list[CommandEntry]:
 
-    entries: list[FeatureEntry] = []
+    entries: list[CommandEntry] = []
 
     for command in commands:
 
         command_name = command.get("name")
-        entries.append(FeatureEntry(requirement, command_name))
+        entries.append(CommandEntry(requirement, command_name))
 
     return entries
 
-def parse_feature_entries(registry: etree.ElementTree, api: VulkanApi) -> list[FeatureEntry]:
-    entries: list[FeatureEntry] = []
+def parse_feature_entries(registry: etree.ElementTree, api: VulkanApi) -> list[CommandEntry]:
+    entries: list[CommandEntry] = []
 
     for feature in registry.findall("feature"):
 
@@ -66,28 +62,6 @@ def parse_feature_entries(registry: etree.ElementTree, api: VulkanApi) -> list[F
 
     return entries
 
-def join_requirements(requirements: list[str], joint: RequirementJoint) -> str:
-
-    valid_requirements: list[str] = []
-
-    contrary_joint = RequirementJoint.AND
-    if joint == contrary_joint:
-        contrary_joint = RequirementJoint.OR
-
-    for requirement in requirements:
-
-        if not requirement:
-            continue
-
-        if contrary_joint.value in requirement:
-            valid_requirements.append(f"({requirement})")
-
-        else:
-
-            valid_requirements.append(requirement)
-
-    return joint.value.join(valid_requirements)
-
 def parse_spec_dependency(require: etree.Element[str], author: str) -> str:
 
     spec = require.find("enum")
@@ -102,8 +76,8 @@ def parse_spec_dependency(require: etree.Element[str], author: str) -> str:
 
     return ""
 
-def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list[FeatureEntry]:
-    entries: list[FeatureEntry] = []
+def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list[CommandEntry]:
+    entries: list[CommandEntry] = []
 
     for extension in registry.findall("extensions/extension"):
 
@@ -115,43 +89,19 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
 
         for require in extension.findall("require"):
 
-            command_dependencies = require.get("depends", "")
-            spec_dependency = parse_spec_dependency(require, extension_author)
+            dependencies = require.get("depends", "")
+            dependencies = f"({dependencies})" if "," in dependencies else dependencies
+            dependencies = f"+{dependencies}" if dependencies else dependencies
 
-            requirement = join_requirements([extension_name, command_dependencies, spec_dependency], RequirementJoint.AND)
+            spec_version = parse_spec_dependency(require, extension_author)
+            spec_version = f"+{spec_version}" if spec_version else spec_version
+
+            requirement = extension_name + dependencies + spec_version
 
             commands = require.findall("command")
             entries.extend(parse_tree_entries(commands, requirement))
 
     return entries
-
-def parse_requirement(requirement: str) -> str:
-
-    buffer = ""
-    parsed = ""
-
-    for index, char in enumerate(requirement):
-
-        last = index == len(requirement) - 1
-        enum = "=" in buffer
-        symbol = char in "()+,"
-
-        if not symbol:
-            buffer += char
-
-        if (buffer and symbol or last and not symbol) and not enum:
-            parsed += f"defined({buffer})"
-
-        if (buffer and symbol or last and not symbol) and enum:
-            parsed += buffer
-
-        if buffer and symbol:
-            buffer = ""
-
-        if symbol:
-            parsed += char
-
-    return parsed.replace("+", " && ").replace(",", " || ")
 
 def get_command_type(type: str, type_parents: dict[str, str | None]) -> CommandType:
     while type:
@@ -238,10 +188,37 @@ def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> dict[Co
 
     return entries
 
+def parse_requirement(requirement: str) -> str:
+
+    buffer = ""
+    parsed = ""
+
+    for index, char in enumerate(requirement):
+
+        last = index == len(requirement) - 1
+        enum = "=" in buffer
+        symbol = char in "()+,"
+
+        if not symbol:
+            buffer += char
+
+        if (buffer and symbol or last and not symbol) and not enum:
+            parsed += f"defined({buffer})"
+
+        if (buffer and symbol or last and not symbol) and enum:
+            parsed += buffer
+
+        if buffer and symbol:
+            buffer = ""
+
+        if symbol:
+            parsed += char
+
+    return parsed.replace("+", " && ").replace(",", " || ")
+
 def patch_file_line(line: str, entries: dict[CommandType, list[Feature]]) -> str:
 
     if not line.lstrip().startswith("//"):
-
         return line
 
     found_command_type = None
@@ -254,49 +231,41 @@ def patch_file_line(line: str, entries: dict[CommandType, list[Feature]]) -> str
             break
 
     if found_command_type is None:
-
         return line
 
     line = line.replace("//", "  ", 1).rstrip() + "\n"
     patched = ""
 
     for feature in entries[found_command_type]:
-
         patched += f"#if {parse_requirement(feature.requirement)} \n"
 
         for command in feature.commands:
-
             patched += line.replace(command_type.value, command)
 
-        patched += f"#endif \n"
+        patched += f"#endif //{feature.requirement}\n"
 
     return patched
 
-def start(registry: etree.ElementTree, api: VulkanApi, file_paths: list[Path]):
+def start(entries: dict[CommandType, list[Feature]], parse_file: ParseFile):
 
-    entries = parse_handle_entries(registry, api)
+    patched_data = ""
 
-    for file_path in file_paths:
+    with open(parse_file.source, "r") as file:
 
-        patched_data = ""
-        lines = []
-
-        with open(file_path, "r") as file:
-
-            lines.extend(file.readlines())
-
-        for line in lines:
-
+        for line in file.readlines():
             patched_data += patch_file_line(line, entries)
 
-        lines.clear()
-        print(patched_data)
-        # with open(file_path, "w") as file:
-
-        #     file.write(patched_data)
+    with open(parse_file.target, "w") as file:
+        file.write(patched_data)
         
+directory = Path(__file__).parent
 registry = get_registry()
-# source_file = Path(__file__).parent / "dok_unparched.c"
-header_file = Path(__file__).parent / "test.h"
+entries = parse_handle_entries(registry, VulkanApi.VULKAN)
 
-start(registry, VulkanApi.VULKAN, [header_file])
+parse_files = [
+    ParseFile(directory / "dok_unparched.c", directory / "dok.c"),
+    ParseFile(directory / "dok_unparched.h", directory / "dok.h")
+]
+
+for parse_file in parse_files:
+    start(entries, parse_file)

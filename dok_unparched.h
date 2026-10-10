@@ -14,35 +14,32 @@ typedef enum DokResult {
 } DokResult;
 
 typedef struct DokInstance_T* DokInstance;
-typedef struct DokGlobalFunctions DokGlobalFunctions;
-typedef struct DokInstanceFunctions DokInstanceFunctions;
-typedef struct DokDeviceFunctions DokDeviceFunctions;
+typedef struct DokGlobalTable DokGlobalTable;
+typedef struct DokInstanceTable DokInstanceTable;
+typedef struct DokDeviceTable DokDeviceTable;
 
-DokResult dokCreateInstance(DokInstance* pInstance);
+DokResult dokCreateInstance(DokInstance* pOut);
 
 void dokDestroyInstance(DokInstance instance);
 
-void dokInitializeGlobalFunctions(DokInstance instance, DokGlobalFunctions* pGlobalFunctions);
+void dokLoadGlobalTable(DokInstance instance, DokGlobalTable* pOut);
 
-void dokInitializeInstanceFunctions(VkInstance instance, DokGlobalFunctions* pGlobalFunctions, DokInstanceFunctions* pInstanceFunctions);
+void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokInstanceTable* pOut);
 
-void dokInitializeDeviceFunctions(VkDevice device, DokInstanceFunctions* pInstanceFunctions, DokDeviceFunctions* pDeviceFunctions);
+void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDeviceTable* pOut);
+
+struct DokGlobalTable {
+//  PFN_{Global} {Global};
+};
+
+struct DokInstanceTable {
+//  PFN_{Instance} {Instance};
+};
+
+struct DokDeviceTable {
+//  PFN_{Device} {Device};
+};
 
 #ifdef __cplusplus
 }
 #endif
-
-struct DokGlobalFunctions {
-//  PFN_{Global} {Global};
-// Global(name)     PFN_{name} {name};
-};
-
-struct DokInstanceFunctions {
-//  PFN_{Instance} {Instance};
-// Instance(name)   PFN_{name} {name};
-};
-
-struct DokDeviceFunctions {
-// PFN_{Device} {Device};
-// Instance(name)   PFN_{name} {name};
-};

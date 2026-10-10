@@ -15,7 +15,7 @@ struct DokInstance_T {
 #endif
 };
 
-DokResult dokCreateInstance(DokInstance* pInstance) {
+DokResult dokCreateInstance(DokInstance* pOut) {
     struct DokInstance_T* ptrInstance = malloc(sizeof(struct DokInstance_T));
     if (!ptrInstance) {
         return DOK_OUT_OF_MEMORY;
@@ -27,7 +27,7 @@ DokResult dokCreateInstance(DokInstance* pInstance) {
     }
     ptrInstance->instanceProcAddr = (PFN_vkGetInstanceProcAddr)GetProcAddress(ptrInstance->module, "vkGetInstanceProcAddr");
 #endif
-    *pInstance = ptrInstance;
+    *pOut = ptrInstance;
     return DOK_SUCCESS;
 }
 
@@ -38,12 +38,23 @@ void dokDestroyInstance(DokInstance instance) {
     free(instance);
 }
 
-void dokInitializeGlobalFunctions(DokInstance instance, DokGlobalFunctions* pOutFunctions) {
+void dokLoadGlobalTable(DokInstance instance, DokGlobalTable* pOut) {
+    PFN_vkGetInstanceProcAddr instanceProcAddr = instance->instanceProcAddr;
+
+//  pOut->{Global} = instanceProcAddr(NULL, "{Global}");
+
 }
 
-void dokInitializeInstanceFunctions(VkInstance instance, DokGlobalFunctions* pGlobalFunctions, DokInstanceFunctions* pOutFunctions) {
+void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokInstanceTable* pOut) {
+    PFN_vkGetInstanceProcAddr instanceProcAddr = pFunctions->instanceProcAddr;
+
+//  pOut->{Instance} = instanceProcAddr(instance, "{Instance}");
+
 }
 
-void dokInitializeDeviceFunctions(VkDevice device, DokInstanceFunctions* pInstanceFunctions, DokDeviceFunctions* pOutFunctions) {
+void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDeviceTable* pOut) {
+    PFN_vkGetDeviceProcAddr deviceProcAddr = pFunctions->vkGetDeviceProcAddr;
+
+//  pOut->{Device} = deviceProcAddr(device, "{Device}");
 
 }
