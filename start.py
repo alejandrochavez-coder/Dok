@@ -143,7 +143,7 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
 
 def parse_requirement(requirement: str) -> str:
 
-    tokenized: list[Token] = tokenize(requirement, "()+,")
+    tokenized: list[Token] = tokenize(requirement, list("()+,"))
     parsed = ""
 
     for token in tokenized:
@@ -249,19 +249,35 @@ def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> list[Ha
 
     return entries
 
-def patch_file_line(line: str) -> str:
+def tokens_patcheable(tokens: list[Token]) -> bool:
 
-    tokenized = tokenize(line, "(){}/")
-    patched = ""
+    first_symbol = find_first_token_type(tokens, TokenType.SYMBOL)
 
-    first_symbol = find_first_token_type(tokenized, TokenType.SYMBOL)
     if not first_symbol:
-        return line
+
+        return False
 
     if first_symbol.value != "//":
+
+        return False
+
+def parse_tokens(tokens: list[Token]):
+    
+    if not tokens:
+        return
+
+    left_hand = tokens.pop()
+    operator = tokens.pop()
+
+def patch_file_line(line: str) -> str:
+
+    tokens = tokenize(line, ["//", "{", "}"])
+    patched = ""
+
+    if not tokens_patcheable(tokens):
         return line
 
-    for token in tokenized:
+    for token in tokens:
 
         patched += f"({token.value})"
 
@@ -295,43 +311,6 @@ def start(registry: etree.ElementTree, api: VulkanApi, file_paths: list[Path]):
 
         patch_file(file_path)
 
-def tokenize(line: str, symbols: list[str]) -> list[Token]:
-
-    symbol_buffer = ""
-    word_buffer = ""
-
-    tokenized: list[Token] = []
-    last_char = ""
-
-    for index, char in enumerate(line):
-
-        last = index == len(line) - 1
-        symbol = char in symbols
-        changed = (last_char in symbols) != symbol
-
-        if changed and word_buffer:
-            tokenized.append(Token(TokenType.ATOM, word_buffer))
-            word_buffer = ""
-
-        if changed and symbol_buffer:
-            tokenized.append(Token(TokenType.SYMBOL, symbol_buffer))
-            symbol_buffer = ""
-
-        if symbol:
-            symbol_buffer += char
-        else:
-            word_buffer += char
-
-        if last and word_buffer:
-            tokenized.append(Token(TokenType.ATOM, word_buffer))
-
-        if last and symbol_buffer:
-            tokenized.append(Token(TokenType.SYMBOL, symbol_buffer))
-
-        last_char = char
-
-    return tokenized
-
 def isolate_token_values(tokenized: list[Token]) -> list[str]:
 
     isolated: list[str] = []
@@ -350,12 +329,44 @@ def find_first_token_type(tokens: list[Token], target: TokenType) -> Token | Non
             return token
 
     return None
+
+def find_limiter(line: str, limiters: list[str], index):
+    
+    for limiter in limiters:
+
+        if line.startswith(limiter, index):
+
+            return limiter
+
+    return ""
+
+def tokenize(line: str, limiters: list[str]) -> list[Token]:
+
+    tokenized: list[Token] = []
+    atom_buffer = ""
+
+    index = 0
+
+    while index < len(line):
+        limiter = find_limiter(line, limiters, index)
+        char = line[index]
+
+        if limiter and atom_buffer:
+            tokenized.append(Token(TokenType.ATOM, atom_buffer))
+            atom_buffer = ""
+
+        if limiter:
+            tokenized.append(Token(TokenType.SYMBOL, limiter))
+            index += len(limiter)
+            continue
+
+        atom_buffer += char
+        index += 1
+
+    return tokenized
         
 registry = get_registry()
 # source_file = Path(__file__).parent / "dok_unparched.c"
 header_file = Path(__file__).parent / "test.h"
 
 start(registry, VulkanApi.VULKAN, [header_file])
-
-# print(isolate_token_values(tokenize("  //PEPE , sillo", string.punctuation + string.whitespace)))
-
