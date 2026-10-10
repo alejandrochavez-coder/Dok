@@ -1,8 +1,7 @@
 import xml.etree.ElementTree as etree
 from dataclasses import dataclass
 from pathlib import Path
-from enum import Enum, auto
-import string
+from enum import Enum
 import urllib.request
 
 class VulkanApi(Enum):
@@ -14,28 +13,14 @@ class RequirementJoint(Enum):
     OR = ","
 
 class CommandType(Enum):
-    Global = "GLOBAL"
-    Instance = "INSTANCE"
-    Device = "DEVICE"
-
-class TokenType(Enum):
-    ATOM = auto()
-    SYMBOL = auto()
+    Global = "{Global}"
+    Instance = "{Instance}"
+    Device = "{Device}"
 
 @dataclass
 class Feature:
     requirement: str
     commands: list[str]
-
-@dataclass
-class HandleEntry:
-    type: CommandType
-    features: list[Feature]
-
-@dataclass
-class Token:
-    type: TokenType
-    value: str
 
 @dataclass
 class FeatureEntry:
@@ -46,7 +31,6 @@ class FeatureEntry:
 class CommandEntry:
     requirement: str
     command: str
-    command_type: CommandType
 
 VULKAN_URL = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml"
 
@@ -143,22 +127,29 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
 
 def parse_requirement(requirement: str) -> str:
 
-    tokenized: list[Token] = tokenize(requirement, list("()+,"))
+    buffer = ""
     parsed = ""
 
-    for token in tokenized:
+    for index, char in enumerate(requirement):
 
-        if token.type == TokenType.SYMBOL:
+        last = index == len(requirement) - 1
+        enum = "=" in buffer
+        symbol = char in "()+,"
 
-            parsed += token.value
-            continue
+        if not symbol:
+            buffer += char
 
-        if "=" in token.value:
+        if (buffer and symbol or last and not symbol) and not enum:
+            parsed += f"defined({buffer})"
 
-            parsed += f"({token.value})"
-            continue
+        if (buffer and symbol or last and not symbol) and enum:
+            parsed += buffer
 
-        parsed += f"defined({token.value})"
+        if buffer and symbol:
+            buffer = ""
+
+        if symbol:
+            parsed += char
 
     return parsed.replace("+", " && ").replace(",", " || ")
 
@@ -209,31 +200,30 @@ def parse_command_entries(registry: etree.ElementTree, api: VulkanApi):
     entries: list[CommandEntry] = []
 
     command_requirements: dict[str, list[str]] = {}
-    command_types = parse_command_types(registry)
 
     for entry in parse_feature_entries(registry, api) + parse_extension_entries(registry, api):
-
         command_requirements.setdefault(entry.command, []).append(entry.requirement)
 
     for command, requirements in command_requirements.items():
+        if len(requirements) == 1:
+            entries.append(CommandEntry(requirements[0], command))
+            continue
 
-        requirement = requirements[0]
-        if len(requirements) != 1:
-            requirement = join_requirements(requirements, RequirementJoint.OR)
-
-        command_type = command_types[command]   
-        entries.append(CommandEntry(requirement, command, command_type))
+        requirement = ",".join(f"({requirement})" for requirement in requirements)
+        entries.append(CommandEntry(requirement, command))
 
     return entries
 
-def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> list[HandleEntry]:
+def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> dict[CommandType, list[Feature]]:
     type_feature_entries: dict[CommandType, dict[str, list[str]]] = {}
+    command_types = parse_command_types(registry)
 
     for entry in parse_command_entries(registry, api):
 
-        type_feature_entries.setdefault(entry.command_type, {}).setdefault(entry.requirement, []).append(entry.command)
+        command_type = command_types[entry.command]
+        type_feature_entries.setdefault(command_type, {}).setdefault(entry.requirement, []).append(entry.command)
 
-    entries: list[HandleEntry] = []
+    entries: dict[CommandType, list[Feature]] = {}
 
     for type, feature_entries in type_feature_entries.items():
 
@@ -244,126 +234,66 @@ def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> list[Ha
             feature = Feature(requirement, commands)
             features.append(feature)
 
-        entry = HandleEntry(type, features)
-        entries.append(entry)
+        entries[type] = features
 
     return entries
 
-def tokens_patcheable(tokens: list[Token]) -> bool:
+def patch_file_line(line: str, entries: dict[CommandType, list[Feature]]) -> str:
 
-    first_symbol = find_first_token_type(tokens, TokenType.SYMBOL)
+    if not line.lstrip().startswith("//"):
 
-    if not first_symbol:
-
-        return False
-
-    if first_symbol.value != "//":
-
-        return False
-
-def parse_tokens(tokens: list[Token]):
-    
-    if not tokens:
-        return
-
-    left_hand = tokens.pop()
-    operator = tokens.pop()
-
-def patch_file_line(line: str) -> str:
-
-    tokens = tokenize(line, ["//", "{", "}"])
-    patched = ""
-
-    if not tokens_patcheable(tokens):
         return line
 
-    for token in tokens:
+    found_command_type = None
 
-        patched += f"({token.value})"
+    for command_type in CommandType:
 
+        if command_type.value in line:
+
+            found_command_type = command_type
+            break
+
+    if found_command_type is None:
+
+        return line
+
+    line = line.replace("//", "  ", 1).rstrip() + "\n"
+    patched = ""
+
+    for feature in entries[found_command_type]:
+
+        patched += f"#if {parse_requirement(feature.requirement)} \n"
+
+        for command in feature.commands:
+
+            patched += line.replace(command_type.value, command)
+
+        patched += f"#endif \n"
 
     return patched
 
-def patch_file(file_path: Path):
-    data = ""
-
-    with open(file_path, "r") as file:
-
-        for line in file.readlines():
-
-            data += patch_file_line(line)
-
-    print(data)
-
 def start(registry: etree.ElementTree, api: VulkanApi, file_paths: list[Path]):
 
-    # for entry in parse_handle_entries(registry, api):
-
-    #     print(entry.type)
-
-    #     for feature in entry.features:
-
-    #         print(parse_requirement(feature.requirement))
-    #         print(",".join(feature.commands))
-    #         print()
+    entries = parse_handle_entries(registry, api)
 
     for file_path in file_paths:
 
-        patch_file(file_path)
+        patched_data = ""
+        lines = []
 
-def isolate_token_values(tokenized: list[Token]) -> list[str]:
+        with open(file_path, "r") as file:
 
-    isolated: list[str] = []
+            lines.extend(file.readlines())
 
-    for token in tokenized:
-        isolated.append(token.value)
+        for line in lines:
 
-    return isolated
+            patched_data += patch_file_line(line, entries)
 
-def find_first_token_type(tokens: list[Token], target: TokenType) -> Token | None:
+        lines.clear()
+        print(patched_data)
+        # with open(file_path, "w") as file:
 
-    for token in tokens:
-
-        if token.type == target:
-
-            return token
-
-    return None
-
-def find_limiter(line: str, limiters: list[str], index):
-    
-    for limiter in limiters:
-
-        if line.startswith(limiter, index):
-
-            return limiter
-
-    return ""
-
-def tokenize(line: str, limiters: list[str]) -> list[Token]:
-
-    tokenized: list[Token] = []
-    atom_buffer = ""
-
-    index = 0
-
-    while index < len(line):
-        limiter = find_limiter(line, limiters, index)
-        char = line[index]
-
-        if limiter and atom_buffer:
-            tokenized.append(Token(TokenType.ATOM, atom_buffer))
-            atom_buffer = ""
-
-        if limiter:
-            tokenized.append(Token(TokenType.SYMBOL, limiter))
-            index += len(limiter)
-            continue
-
-        atom_buffer += char
-        index += 1
-
-    return tokenized
+        #     file.write(patched_data)
         
 registry = get_registry()
 # source_file = Path(__file__).parent / "dok_unparched.c"
