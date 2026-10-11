@@ -50,6 +50,7 @@ void dokLoadGlobalTable(DokInstance instance, DokGlobalTable* pOut) {
 #if defined(VK_VERSION_1_1) 
     pOut->vkEnumerateInstanceVersion = instanceProcAddr(NULL, "vkEnumerateInstanceVersion");
 #endif //VK_VERSION_1_1
+
 }
 
 void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokInstanceTable* pOut) {
@@ -93,9 +94,9 @@ void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokIn
     pOut->vkGetPhysicalDeviceSurfaceFormatsKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceSurfaceFormatsKHR");
     pOut->vkGetPhysicalDeviceSurfacePresentModesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceSurfacePresentModesKHR");
 #endif //VK_KHR_surface
-#if (defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1)) || (defined(VK_KHR_device_group) && defined(VK_KHR_surface)) 
+#if defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1) 
     pOut->vkGetPhysicalDevicePresentRectanglesKHR = instanceProcAddr(instance, "vkGetPhysicalDevicePresentRectanglesKHR");
-#endif //(VK_KHR_swapchain+VK_VERSION_1_1),(VK_KHR_device_group+VK_KHR_surface)
+#endif //VK_KHR_swapchain+VK_VERSION_1_1
 #if defined(VK_KHR_display) 
     pOut->vkGetPhysicalDeviceDisplayPropertiesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceDisplayPropertiesKHR");
     pOut->vkGetPhysicalDeviceDisplayPlanePropertiesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceDisplayPlanePropertiesKHR");
@@ -124,11 +125,6 @@ void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokIn
     pOut->vkCreateWin32SurfaceKHR = instanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
     pOut->vkGetPhysicalDeviceWin32PresentationSupportKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceWin32PresentationSupportKHR");
 #endif //VK_KHR_win32_surface
-#if defined(VK_EXT_debug_report) && VK_EXT_DEBUG_REPORT_SPEC_VERSION >= 10 
-    pOut->vkCreateDebugReportCallbackEXT = instanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
-    pOut->vkDestroyDebugReportCallbackEXT = instanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT");
-    pOut->vkDebugReportMessageEXT = instanceProcAddr(instance, "vkDebugReportMessageEXT");
-#endif //VK_EXT_debug_report+VK_EXT_DEBUG_REPORT_SPEC_VERSION >= 10
 #if defined(VK_KHR_video_queue) 
     pOut->vkGetPhysicalDeviceVideoCapabilitiesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceVideoCapabilitiesKHR");
     pOut->vkGetPhysicalDeviceVideoFormatPropertiesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceVideoFormatPropertiesKHR");
@@ -136,30 +132,9 @@ void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokIn
 #if defined(VK_GGP_stream_descriptor_surface) 
     pOut->vkCreateStreamDescriptorSurfaceGGP = instanceProcAddr(instance, "vkCreateStreamDescriptorSurfaceGGP");
 #endif //VK_GGP_stream_descriptor_surface
-#if defined(VK_NV_external_memory_capabilities) 
-    pOut->vkGetPhysicalDeviceExternalImageFormatPropertiesNV = instanceProcAddr(instance, "vkGetPhysicalDeviceExternalImageFormatPropertiesNV");
-#endif //VK_NV_external_memory_capabilities
-#if defined(VK_KHR_get_physical_device_properties2) 
-    pOut->vkGetPhysicalDeviceFeatures2KHR = instanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2KHR");
-    pOut->vkGetPhysicalDeviceProperties2KHR = instanceProcAddr(instance, "vkGetPhysicalDeviceProperties2KHR");
-    pOut->vkGetPhysicalDeviceFormatProperties2KHR = instanceProcAddr(instance, "vkGetPhysicalDeviceFormatProperties2KHR");
-    pOut->vkGetPhysicalDeviceImageFormatProperties2KHR = instanceProcAddr(instance, "vkGetPhysicalDeviceImageFormatProperties2KHR");
-    pOut->vkGetPhysicalDeviceQueueFamilyProperties2KHR = instanceProcAddr(instance, "vkGetPhysicalDeviceQueueFamilyProperties2KHR");
-    pOut->vkGetPhysicalDeviceMemoryProperties2KHR = instanceProcAddr(instance, "vkGetPhysicalDeviceMemoryProperties2KHR");
-    pOut->vkGetPhysicalDeviceSparseImageFormatProperties2KHR = instanceProcAddr(instance, "vkGetPhysicalDeviceSparseImageFormatProperties2KHR");
-#endif //VK_KHR_get_physical_device_properties2
 #if defined(VK_NN_vi_surface) 
     pOut->vkCreateViSurfaceNN = instanceProcAddr(instance, "vkCreateViSurfaceNN");
 #endif //VK_NN_vi_surface
-#if defined(VK_KHR_device_group_creation) 
-    pOut->vkEnumeratePhysicalDeviceGroupsKHR = instanceProcAddr(instance, "vkEnumeratePhysicalDeviceGroupsKHR");
-#endif //VK_KHR_device_group_creation
-#if defined(VK_KHR_external_memory_capabilities) 
-    pOut->vkGetPhysicalDeviceExternalBufferPropertiesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceExternalBufferPropertiesKHR");
-#endif //VK_KHR_external_memory_capabilities
-#if defined(VK_KHR_external_semaphore_capabilities) 
-    pOut->vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR");
-#endif //VK_KHR_external_semaphore_capabilities
 #if defined(VK_EXT_direct_mode_display) 
     pOut->vkReleaseDisplayEXT = instanceProcAddr(instance, "vkReleaseDisplayEXT");
 #endif //VK_EXT_direct_mode_display
@@ -170,9 +145,6 @@ void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokIn
 #if defined(VK_EXT_display_surface_counter) 
     pOut->vkGetPhysicalDeviceSurfaceCapabilities2EXT = instanceProcAddr(instance, "vkGetPhysicalDeviceSurfaceCapabilities2EXT");
 #endif //VK_EXT_display_surface_counter
-#if defined(VK_KHR_external_fence_capabilities) 
-    pOut->vkGetPhysicalDeviceExternalFencePropertiesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceExternalFencePropertiesKHR");
-#endif //VK_KHR_external_fence_capabilities
 #if defined(VK_KHR_performance_query) 
     pOut->vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR = instanceProcAddr(instance, "vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR");
     pOut->vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR");
@@ -187,12 +159,6 @@ void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokIn
     pOut->vkGetDisplayModeProperties2KHR = instanceProcAddr(instance, "vkGetDisplayModeProperties2KHR");
     pOut->vkGetDisplayPlaneCapabilities2KHR = instanceProcAddr(instance, "vkGetDisplayPlaneCapabilities2KHR");
 #endif //VK_KHR_get_display_properties2
-#if defined(VK_MVK_ios_surface) && VK_MVK_IOS_SURFACE_SPEC_VERSION >= 3 
-    pOut->vkCreateIOSSurfaceMVK = instanceProcAddr(instance, "vkCreateIOSSurfaceMVK");
-#endif //VK_MVK_ios_surface+VK_MVK_IOS_SURFACE_SPEC_VERSION >= 3
-#if defined(VK_MVK_macos_surface) && VK_MVK_MACOS_SURFACE_SPEC_VERSION >= 3 
-    pOut->vkCreateMacOSSurfaceMVK = instanceProcAddr(instance, "vkCreateMacOSSurfaceMVK");
-#endif //VK_MVK_macos_surface+VK_MVK_MACOS_SURFACE_SPEC_VERSION >= 3
 #if defined(VK_EXT_debug_utils) && VK_EXT_DEBUG_UTILS_SPEC_VERSION >= 2 
     pOut->vkCreateDebugUtilsMessengerEXT = instanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     pOut->vkDestroyDebugUtilsMessengerEXT = instanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
@@ -204,9 +170,6 @@ void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokIn
 #if defined(VK_EXT_sample_locations) 
     pOut->vkGetPhysicalDeviceMultisamplePropertiesEXT = instanceProcAddr(instance, "vkGetPhysicalDeviceMultisamplePropertiesEXT");
 #endif //VK_EXT_sample_locations
-#if defined(VK_EXT_calibrated_timestamps) && VK_EXT_CALIBRATED_TIMESTAMPS_SPEC_VERSION >= 2 
-    pOut->vkGetPhysicalDeviceCalibrateableTimeDomainsEXT = instanceProcAddr(instance, "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
-#endif //VK_EXT_calibrated_timestamps+VK_EXT_CALIBRATED_TIMESTAMPS_SPEC_VERSION >= 2
 #if defined(VK_FUCHSIA_imagepipe_surface) 
     pOut->vkCreateImagePipeSurfaceFUCHSIA = instanceProcAddr(instance, "vkCreateImagePipeSurfaceFUCHSIA");
 #endif //VK_FUCHSIA_imagepipe_surface
@@ -216,9 +179,6 @@ void dokLoadInstanceTable(VkInstance instance, DokGlobalTable* pFunctions, DokIn
 #if defined(VK_KHR_fragment_shading_rate) 
     pOut->vkGetPhysicalDeviceFragmentShadingRatesKHR = instanceProcAddr(instance, "vkGetPhysicalDeviceFragmentShadingRatesKHR");
 #endif //VK_KHR_fragment_shading_rate
-#if defined(VK_EXT_tooling_info) 
-    pOut->vkGetPhysicalDeviceToolPropertiesEXT = instanceProcAddr(instance, "vkGetPhysicalDeviceToolPropertiesEXT");
-#endif //VK_EXT_tooling_info
 #if defined(VK_NV_cooperative_matrix) 
     pOut->vkGetPhysicalDeviceCooperativeMatrixPropertiesNV = instanceProcAddr(instance, "vkGetPhysicalDeviceCooperativeMatrixPropertiesNV");
 #endif //VK_NV_cooperative_matrix
@@ -521,23 +481,14 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkAcquireNextImageKHR = deviceProcAddr(device, "vkAcquireNextImageKHR");
     pOut->vkQueuePresentKHR = deviceProcAddr(device, "vkQueuePresentKHR");
 #endif //VK_KHR_swapchain
-#if (defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1)) || (defined(VK_KHR_device_group) && defined(VK_KHR_surface)) 
+#if defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1) 
     pOut->vkGetDeviceGroupPresentCapabilitiesKHR = deviceProcAddr(device, "vkGetDeviceGroupPresentCapabilitiesKHR");
     pOut->vkGetDeviceGroupSurfacePresentModesKHR = deviceProcAddr(device, "vkGetDeviceGroupSurfacePresentModesKHR");
-#endif //(VK_KHR_swapchain+VK_VERSION_1_1),(VK_KHR_device_group+VK_KHR_surface)
-#if (defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1)) || (defined(VK_KHR_device_group) && defined(VK_KHR_swapchain)) 
     pOut->vkAcquireNextImage2KHR = deviceProcAddr(device, "vkAcquireNextImage2KHR");
-#endif //(VK_KHR_swapchain+VK_VERSION_1_1),(VK_KHR_device_group+VK_KHR_swapchain)
+#endif //VK_KHR_swapchain+VK_VERSION_1_1
 #if defined(VK_KHR_display_swapchain) 
     pOut->vkCreateSharedSwapchainsKHR = deviceProcAddr(device, "vkCreateSharedSwapchainsKHR");
 #endif //VK_KHR_display_swapchain
-#if defined(VK_EXT_debug_marker) && VK_EXT_DEBUG_MARKER_SPEC_VERSION >= 4 
-    pOut->vkDebugMarkerSetObjectTagEXT = deviceProcAddr(device, "vkDebugMarkerSetObjectTagEXT");
-    pOut->vkDebugMarkerSetObjectNameEXT = deviceProcAddr(device, "vkDebugMarkerSetObjectNameEXT");
-    pOut->vkCmdDebugMarkerBeginEXT = deviceProcAddr(device, "vkCmdDebugMarkerBeginEXT");
-    pOut->vkCmdDebugMarkerEndEXT = deviceProcAddr(device, "vkCmdDebugMarkerEndEXT");
-    pOut->vkCmdDebugMarkerInsertEXT = deviceProcAddr(device, "vkCmdDebugMarkerInsertEXT");
-#endif //VK_EXT_debug_marker+VK_EXT_DEBUG_MARKER_SPEC_VERSION >= 4
 #if defined(VK_KHR_video_queue) 
     pOut->vkCreateVideoSessionKHR = deviceProcAddr(device, "vkCreateVideoSessionKHR");
     pOut->vkDestroyVideoSessionKHR = deviceProcAddr(device, "vkDestroyVideoSessionKHR");
@@ -574,28 +525,9 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkGetImageViewAddressNVX = deviceProcAddr(device, "vkGetImageViewAddressNVX");
     pOut->vkGetDeviceCombinedImageSamplerIndexNVX = deviceProcAddr(device, "vkGetDeviceCombinedImageSamplerIndexNVX");
 #endif //VK_NVX_image_view_handle+VK_NVX_IMAGE_VIEW_HANDLE_SPEC_VERSION >= 4
-#if defined(VK_AMD_draw_indirect_count) && VK_AMD_DRAW_INDIRECT_COUNT_SPEC_VERSION >= 2 
-    pOut->vkCmdDrawIndirectCountAMD = deviceProcAddr(device, "vkCmdDrawIndirectCountAMD");
-    pOut->vkCmdDrawIndexedIndirectCountAMD = deviceProcAddr(device, "vkCmdDrawIndexedIndirectCountAMD");
-#endif //VK_AMD_draw_indirect_count+VK_AMD_DRAW_INDIRECT_COUNT_SPEC_VERSION >= 2
 #if defined(VK_AMD_shader_info) 
     pOut->vkGetShaderInfoAMD = deviceProcAddr(device, "vkGetShaderInfoAMD");
 #endif //VK_AMD_shader_info
-#if defined(VK_KHR_dynamic_rendering) 
-    pOut->vkCmdBeginRenderingKHR = deviceProcAddr(device, "vkCmdBeginRenderingKHR");
-    pOut->vkCmdEndRenderingKHR = deviceProcAddr(device, "vkCmdEndRenderingKHR");
-#endif //VK_KHR_dynamic_rendering
-#if defined(VK_NV_external_memory_win32) 
-    pOut->vkGetMemoryWin32HandleNV = deviceProcAddr(device, "vkGetMemoryWin32HandleNV");
-#endif //VK_NV_external_memory_win32
-#if defined(VK_KHR_device_group) 
-    pOut->vkGetDeviceGroupPeerMemoryFeaturesKHR = deviceProcAddr(device, "vkGetDeviceGroupPeerMemoryFeaturesKHR");
-    pOut->vkCmdSetDeviceMaskKHR = deviceProcAddr(device, "vkCmdSetDeviceMaskKHR");
-    pOut->vkCmdDispatchBaseKHR = deviceProcAddr(device, "vkCmdDispatchBaseKHR");
-#endif //VK_KHR_device_group
-#if defined(VK_KHR_maintenance1) 
-    pOut->vkTrimCommandPoolKHR = deviceProcAddr(device, "vkTrimCommandPoolKHR");
-#endif //VK_KHR_maintenance1
 #if defined(VK_KHR_external_memory_win32) 
     pOut->vkGetMemoryWin32HandleKHR = deviceProcAddr(device, "vkGetMemoryWin32HandleKHR");
     pOut->vkGetMemoryWin32HandlePropertiesKHR = deviceProcAddr(device, "vkGetMemoryWin32HandlePropertiesKHR");
@@ -612,21 +544,10 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkImportSemaphoreFdKHR = deviceProcAddr(device, "vkImportSemaphoreFdKHR");
     pOut->vkGetSemaphoreFdKHR = deviceProcAddr(device, "vkGetSemaphoreFdKHR");
 #endif //VK_KHR_external_semaphore_fd
-#if defined(VK_KHR_push_descriptor) 
-    pOut->vkCmdPushDescriptorSetKHR = deviceProcAddr(device, "vkCmdPushDescriptorSetKHR");
-#endif //VK_KHR_push_descriptor
-#if (defined(VK_KHR_push_descriptor) && (defined(VK_VERSION_1_1) || defined(VK_KHR_descriptor_update_template))) || (defined(VK_KHR_descriptor_update_template) && defined(VK_KHR_push_descriptor)) 
-    pOut->vkCmdPushDescriptorSetWithTemplateKHR = deviceProcAddr(device, "vkCmdPushDescriptorSetWithTemplateKHR");
-#endif //(VK_KHR_push_descriptor+(VK_VERSION_1_1,VK_KHR_descriptor_update_template)),(VK_KHR_descriptor_update_template+VK_KHR_push_descriptor)
 #if defined(VK_EXT_conditional_rendering) && VK_EXT_CONDITIONAL_RENDERING_SPEC_VERSION >= 2 
     pOut->vkCmdBeginConditionalRenderingEXT = deviceProcAddr(device, "vkCmdBeginConditionalRenderingEXT");
     pOut->vkCmdEndConditionalRenderingEXT = deviceProcAddr(device, "vkCmdEndConditionalRenderingEXT");
 #endif //VK_EXT_conditional_rendering+VK_EXT_CONDITIONAL_RENDERING_SPEC_VERSION >= 2
-#if defined(VK_KHR_descriptor_update_template) 
-    pOut->vkCreateDescriptorUpdateTemplateKHR = deviceProcAddr(device, "vkCreateDescriptorUpdateTemplateKHR");
-    pOut->vkDestroyDescriptorUpdateTemplateKHR = deviceProcAddr(device, "vkDestroyDescriptorUpdateTemplateKHR");
-    pOut->vkUpdateDescriptorSetWithTemplateKHR = deviceProcAddr(device, "vkUpdateDescriptorSetWithTemplateKHR");
-#endif //VK_KHR_descriptor_update_template
 #if defined(VK_NV_clip_space_w_scaling) 
     pOut->vkCmdSetViewportWScalingNV = deviceProcAddr(device, "vkCmdSetViewportWScalingNV");
 #endif //VK_NV_clip_space_w_scaling
@@ -648,12 +569,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_EXT_hdr_metadata) && VK_EXT_HDR_METADATA_SPEC_VERSION >= 3 
     pOut->vkSetHdrMetadataEXT = deviceProcAddr(device, "vkSetHdrMetadataEXT");
 #endif //VK_EXT_hdr_metadata+VK_EXT_HDR_METADATA_SPEC_VERSION >= 3
-#if defined(VK_KHR_create_renderpass2) 
-    pOut->vkCreateRenderPass2KHR = deviceProcAddr(device, "vkCreateRenderPass2KHR");
-    pOut->vkCmdBeginRenderPass2KHR = deviceProcAddr(device, "vkCmdBeginRenderPass2KHR");
-    pOut->vkCmdNextSubpass2KHR = deviceProcAddr(device, "vkCmdNextSubpass2KHR");
-    pOut->vkCmdEndRenderPass2KHR = deviceProcAddr(device, "vkCmdEndRenderPass2KHR");
-#endif //VK_KHR_create_renderpass2
 #if defined(VK_KHR_shared_presentable_image) 
     pOut->vkGetSwapchainStatusKHR = deviceProcAddr(device, "vkGetSwapchainStatusKHR");
 #endif //VK_KHR_shared_presentable_image
@@ -724,11 +639,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_EXT_sample_locations) 
     pOut->vkCmdSetSampleLocationsEXT = deviceProcAddr(device, "vkCmdSetSampleLocationsEXT");
 #endif //VK_EXT_sample_locations
-#if defined(VK_KHR_get_memory_requirements2) 
-    pOut->vkGetImageMemoryRequirements2KHR = deviceProcAddr(device, "vkGetImageMemoryRequirements2KHR");
-    pOut->vkGetBufferMemoryRequirements2KHR = deviceProcAddr(device, "vkGetBufferMemoryRequirements2KHR");
-    pOut->vkGetImageSparseMemoryRequirements2KHR = deviceProcAddr(device, "vkGetImageSparseMemoryRequirements2KHR");
-#endif //VK_KHR_get_memory_requirements2
 #if defined(VK_KHR_acceleration_structure) 
     pOut->vkCreateAccelerationStructureKHR = deviceProcAddr(device, "vkCreateAccelerationStructureKHR");
     pOut->vkDestroyAccelerationStructureKHR = deviceProcAddr(device, "vkDestroyAccelerationStructureKHR");
@@ -756,14 +666,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkGetRayTracingShaderGroupStackSizeKHR = deviceProcAddr(device, "vkGetRayTracingShaderGroupStackSizeKHR");
     pOut->vkCmdSetRayTracingPipelineStackSizeKHR = deviceProcAddr(device, "vkCmdSetRayTracingPipelineStackSizeKHR");
 #endif //VK_KHR_ray_tracing_pipeline
-#if defined(VK_KHR_sampler_ycbcr_conversion) 
-    pOut->vkCreateSamplerYcbcrConversionKHR = deviceProcAddr(device, "vkCreateSamplerYcbcrConversionKHR");
-    pOut->vkDestroySamplerYcbcrConversionKHR = deviceProcAddr(device, "vkDestroySamplerYcbcrConversionKHR");
-#endif //VK_KHR_sampler_ycbcr_conversion
-#if defined(VK_KHR_bind_memory2) 
-    pOut->vkBindBufferMemory2KHR = deviceProcAddr(device, "vkBindBufferMemory2KHR");
-    pOut->vkBindImageMemory2KHR = deviceProcAddr(device, "vkBindImageMemory2KHR");
-#endif //VK_KHR_bind_memory2
 #if defined(VK_EXT_image_drm_format_modifier) && VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_SPEC_VERSION >= 2 
     pOut->vkGetImageDrmFormatModifierPropertiesEXT = deviceProcAddr(device, "vkGetImageDrmFormatModifierPropertiesEXT");
 #endif //VK_EXT_image_drm_format_modifier+VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_SPEC_VERSION >= 2
@@ -778,27 +680,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkCmdSetViewportShadingRatePaletteNV = deviceProcAddr(device, "vkCmdSetViewportShadingRatePaletteNV");
     pOut->vkCmdSetCoarseSampleOrderNV = deviceProcAddr(device, "vkCmdSetCoarseSampleOrderNV");
 #endif //VK_NV_shading_rate_image+VK_NV_SHADING_RATE_IMAGE_SPEC_VERSION >= 3
-#if defined(VK_NV_ray_tracing) && VK_NV_RAY_TRACING_SPEC_VERSION >= 3 
-    pOut->vkCreateAccelerationStructureNV = deviceProcAddr(device, "vkCreateAccelerationStructureNV");
-    pOut->vkDestroyAccelerationStructureNV = deviceProcAddr(device, "vkDestroyAccelerationStructureNV");
-    pOut->vkGetAccelerationStructureMemoryRequirementsNV = deviceProcAddr(device, "vkGetAccelerationStructureMemoryRequirementsNV");
-    pOut->vkBindAccelerationStructureMemoryNV = deviceProcAddr(device, "vkBindAccelerationStructureMemoryNV");
-    pOut->vkCmdBuildAccelerationStructureNV = deviceProcAddr(device, "vkCmdBuildAccelerationStructureNV");
-    pOut->vkCmdCopyAccelerationStructureNV = deviceProcAddr(device, "vkCmdCopyAccelerationStructureNV");
-    pOut->vkCmdTraceRaysNV = deviceProcAddr(device, "vkCmdTraceRaysNV");
-    pOut->vkCreateRayTracingPipelinesNV = deviceProcAddr(device, "vkCreateRayTracingPipelinesNV");
-    pOut->vkGetRayTracingShaderGroupHandlesNV = deviceProcAddr(device, "vkGetRayTracingShaderGroupHandlesNV");
-    pOut->vkGetAccelerationStructureHandleNV = deviceProcAddr(device, "vkGetAccelerationStructureHandleNV");
-    pOut->vkCmdWriteAccelerationStructuresPropertiesNV = deviceProcAddr(device, "vkCmdWriteAccelerationStructuresPropertiesNV");
-    pOut->vkCompileDeferredNV = deviceProcAddr(device, "vkCompileDeferredNV");
-#endif //VK_NV_ray_tracing+VK_NV_RAY_TRACING_SPEC_VERSION >= 3
-#if defined(VK_KHR_maintenance3) 
-    pOut->vkGetDescriptorSetLayoutSupportKHR = deviceProcAddr(device, "vkGetDescriptorSetLayoutSupportKHR");
-#endif //VK_KHR_maintenance3
-#if defined(VK_KHR_draw_indirect_count) 
-    pOut->vkCmdDrawIndirectCountKHR = deviceProcAddr(device, "vkCmdDrawIndirectCountKHR");
-    pOut->vkCmdDrawIndexedIndirectCountKHR = deviceProcAddr(device, "vkCmdDrawIndexedIndirectCountKHR");
-#endif //VK_KHR_draw_indirect_count
 #if defined(VK_EXT_external_memory_host) 
     pOut->vkGetMemoryHostPointerPropertiesEXT = deviceProcAddr(device, "vkGetMemoryHostPointerPropertiesEXT");
 #endif //VK_EXT_external_memory_host
@@ -808,9 +689,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_AMD_buffer_marker) && (defined(VK_VERSION_1_3) || defined(VK_KHR_synchronization2)) 
     pOut->vkCmdWriteBufferMarker2AMD = deviceProcAddr(device, "vkCmdWriteBufferMarker2AMD");
 #endif //VK_AMD_buffer_marker+(VK_VERSION_1_3,VK_KHR_synchronization2)
-#if defined(VK_EXT_calibrated_timestamps) && VK_EXT_CALIBRATED_TIMESTAMPS_SPEC_VERSION >= 2 
-    pOut->vkGetCalibratedTimestampsEXT = deviceProcAddr(device, "vkGetCalibratedTimestampsEXT");
-#endif //VK_EXT_calibrated_timestamps+VK_EXT_CALIBRATED_TIMESTAMPS_SPEC_VERSION >= 2
 #if defined(VK_NV_mesh_shader) 
     pOut->vkCmdDrawMeshTasksNV = deviceProcAddr(device, "vkCmdDrawMeshTasksNV");
     pOut->vkCmdDrawMeshTasksIndirectNV = deviceProcAddr(device, "vkCmdDrawMeshTasksIndirectNV");
@@ -829,11 +707,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_NV_device_diagnostic_checkpoints) && (defined(VK_VERSION_1_3) || defined(VK_KHR_synchronization2)) 
     pOut->vkGetQueueCheckpointData2NV = deviceProcAddr(device, "vkGetQueueCheckpointData2NV");
 #endif //VK_NV_device_diagnostic_checkpoints+(VK_VERSION_1_3,VK_KHR_synchronization2)
-#if defined(VK_KHR_timeline_semaphore) 
-    pOut->vkGetSemaphoreCounterValueKHR = deviceProcAddr(device, "vkGetSemaphoreCounterValueKHR");
-    pOut->vkWaitSemaphoresKHR = deviceProcAddr(device, "vkWaitSemaphoresKHR");
-    pOut->vkSignalSemaphoreKHR = deviceProcAddr(device, "vkSignalSemaphoreKHR");
-#endif //VK_KHR_timeline_semaphore
 #if defined(VK_EXT_present_timing) && VK_EXT_PRESENT_TIMING_SPEC_VERSION >= 3 
     pOut->vkSetSwapchainPresentTimingQueueSizeEXT = deviceProcAddr(device, "vkSetSwapchainPresentTimingQueueSizeEXT");
     pOut->vkGetSwapchainTimingPropertiesEXT = deviceProcAddr(device, "vkGetSwapchainTimingPropertiesEXT");
@@ -857,13 +730,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_KHR_fragment_shading_rate) 
     pOut->vkCmdSetFragmentShadingRateKHR = deviceProcAddr(device, "vkCmdSetFragmentShadingRateKHR");
 #endif //VK_KHR_fragment_shading_rate
-#if defined(VK_KHR_dynamic_rendering_local_read) 
-    pOut->vkCmdSetRenderingAttachmentLocationsKHR = deviceProcAddr(device, "vkCmdSetRenderingAttachmentLocationsKHR");
-    pOut->vkCmdSetRenderingInputAttachmentIndicesKHR = deviceProcAddr(device, "vkCmdSetRenderingInputAttachmentIndicesKHR");
-#endif //VK_KHR_dynamic_rendering_local_read
-#if defined(VK_EXT_buffer_device_address) && VK_EXT_BUFFER_DEVICE_ADDRESS_SPEC_VERSION >= 2 
-    pOut->vkGetBufferDeviceAddressEXT = deviceProcAddr(device, "vkGetBufferDeviceAddressEXT");
-#endif //VK_EXT_buffer_device_address+VK_EXT_BUFFER_DEVICE_ADDRESS_SPEC_VERSION >= 2
 #if defined(VK_KHR_present_wait) 
     pOut->vkWaitForPresentKHR = deviceProcAddr(device, "vkWaitForPresentKHR");
 #endif //VK_KHR_present_wait
@@ -874,31 +740,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_EXT_full_screen_exclusive) && (defined(VK_KHR_device_group) || defined(VK_VERSION_1_1)) 
     pOut->vkGetDeviceGroupSurfacePresentModes2EXT = deviceProcAddr(device, "vkGetDeviceGroupSurfacePresentModes2EXT");
 #endif //VK_EXT_full_screen_exclusive+(VK_KHR_device_group,VK_VERSION_1_1)
-#if defined(VK_KHR_buffer_device_address) 
-    pOut->vkGetBufferDeviceAddressKHR = deviceProcAddr(device, "vkGetBufferDeviceAddressKHR");
-    pOut->vkGetBufferOpaqueCaptureAddressKHR = deviceProcAddr(device, "vkGetBufferOpaqueCaptureAddressKHR");
-    pOut->vkGetDeviceMemoryOpaqueCaptureAddressKHR = deviceProcAddr(device, "vkGetDeviceMemoryOpaqueCaptureAddressKHR");
-#endif //VK_KHR_buffer_device_address
-#if defined(VK_EXT_line_rasterization) 
-    pOut->vkCmdSetLineStippleEXT = deviceProcAddr(device, "vkCmdSetLineStippleEXT");
-#endif //VK_EXT_line_rasterization
-#if defined(VK_EXT_host_query_reset) 
-    pOut->vkResetQueryPoolEXT = deviceProcAddr(device, "vkResetQueryPoolEXT");
-#endif //VK_EXT_host_query_reset
-#if (defined(VK_EXT_extended_dynamic_state)) || (defined(VK_EXT_shader_object)) 
-    pOut->vkCmdSetCullModeEXT = deviceProcAddr(device, "vkCmdSetCullModeEXT");
-    pOut->vkCmdSetFrontFaceEXT = deviceProcAddr(device, "vkCmdSetFrontFaceEXT");
-    pOut->vkCmdSetPrimitiveTopologyEXT = deviceProcAddr(device, "vkCmdSetPrimitiveTopologyEXT");
-    pOut->vkCmdSetViewportWithCountEXT = deviceProcAddr(device, "vkCmdSetViewportWithCountEXT");
-    pOut->vkCmdSetScissorWithCountEXT = deviceProcAddr(device, "vkCmdSetScissorWithCountEXT");
-    pOut->vkCmdBindVertexBuffers2EXT = deviceProcAddr(device, "vkCmdBindVertexBuffers2EXT");
-    pOut->vkCmdSetDepthTestEnableEXT = deviceProcAddr(device, "vkCmdSetDepthTestEnableEXT");
-    pOut->vkCmdSetDepthWriteEnableEXT = deviceProcAddr(device, "vkCmdSetDepthWriteEnableEXT");
-    pOut->vkCmdSetDepthCompareOpEXT = deviceProcAddr(device, "vkCmdSetDepthCompareOpEXT");
-    pOut->vkCmdSetDepthBoundsTestEnableEXT = deviceProcAddr(device, "vkCmdSetDepthBoundsTestEnableEXT");
-    pOut->vkCmdSetStencilTestEnableEXT = deviceProcAddr(device, "vkCmdSetStencilTestEnableEXT");
-    pOut->vkCmdSetStencilOpEXT = deviceProcAddr(device, "vkCmdSetStencilOpEXT");
-#endif //(VK_EXT_extended_dynamic_state),(VK_EXT_shader_object)
 #if defined(VK_KHR_deferred_host_operations) 
     pOut->vkCreateDeferredOperationKHR = deviceProcAddr(device, "vkCreateDeferredOperationKHR");
     pOut->vkDestroyDeferredOperationKHR = deviceProcAddr(device, "vkDestroyDeferredOperationKHR");
@@ -911,22 +752,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkGetPipelineExecutableStatisticsKHR = deviceProcAddr(device, "vkGetPipelineExecutableStatisticsKHR");
     pOut->vkGetPipelineExecutableInternalRepresentationsKHR = deviceProcAddr(device, "vkGetPipelineExecutableInternalRepresentationsKHR");
 #endif //VK_KHR_pipeline_executable_properties
-#if defined(VK_EXT_host_image_copy) 
-    pOut->vkCopyMemoryToImageEXT = deviceProcAddr(device, "vkCopyMemoryToImageEXT");
-    pOut->vkCopyImageToMemoryEXT = deviceProcAddr(device, "vkCopyImageToMemoryEXT");
-    pOut->vkCopyImageToImageEXT = deviceProcAddr(device, "vkCopyImageToImageEXT");
-    pOut->vkTransitionImageLayoutEXT = deviceProcAddr(device, "vkTransitionImageLayoutEXT");
-#endif //VK_EXT_host_image_copy
-#if (defined(VK_EXT_host_image_copy)) || (defined(VK_EXT_image_compression_control)) 
-    pOut->vkGetImageSubresourceLayout2EXT = deviceProcAddr(device, "vkGetImageSubresourceLayout2EXT");
-#endif //(VK_EXT_host_image_copy),(VK_EXT_image_compression_control)
-#if defined(VK_KHR_map_memory2) 
-    pOut->vkMapMemory2KHR = deviceProcAddr(device, "vkMapMemory2KHR");
-    pOut->vkUnmapMemory2KHR = deviceProcAddr(device, "vkUnmapMemory2KHR");
-#endif //VK_KHR_map_memory2
-#if defined(VK_EXT_swapchain_maintenance1) 
-    pOut->vkReleaseSwapchainImagesEXT = deviceProcAddr(device, "vkReleaseSwapchainImagesEXT");
-#endif //VK_EXT_swapchain_maintenance1
 #if defined(VK_NV_device_generated_commands) && VK_NV_DEVICE_GENERATED_COMMANDS_SPEC_VERSION >= 3 
     pOut->vkGetGeneratedCommandsMemoryRequirementsNV = deviceProcAddr(device, "vkGetGeneratedCommandsMemoryRequirementsNV");
     pOut->vkCmdPreprocessGeneratedCommandsNV = deviceProcAddr(device, "vkCmdPreprocessGeneratedCommandsNV");
@@ -938,12 +763,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_EXT_depth_bias_control) 
     pOut->vkCmdSetDepthBias2EXT = deviceProcAddr(device, "vkCmdSetDepthBias2EXT");
 #endif //VK_EXT_depth_bias_control
-#if defined(VK_EXT_private_data) 
-    pOut->vkCreatePrivateDataSlotEXT = deviceProcAddr(device, "vkCreatePrivateDataSlotEXT");
-    pOut->vkDestroyPrivateDataSlotEXT = deviceProcAddr(device, "vkDestroyPrivateDataSlotEXT");
-    pOut->vkSetPrivateDataEXT = deviceProcAddr(device, "vkSetPrivateDataEXT");
-    pOut->vkGetPrivateDataEXT = deviceProcAddr(device, "vkGetPrivateDataEXT");
-#endif //VK_EXT_private_data
 #if defined(VK_KHR_video_encode_queue) 
     pOut->vkGetEncodedVideoSessionParametersKHR = deviceProcAddr(device, "vkGetEncodedVideoSessionParametersKHR");
     pOut->vkCmdEncodeVideoKHR = deviceProcAddr(device, "vkCmdEncodeVideoKHR");
@@ -964,41 +783,9 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkCmdBeginPerTileExecutionQCOM = deviceProcAddr(device, "vkCmdBeginPerTileExecutionQCOM");
     pOut->vkCmdEndPerTileExecutionQCOM = deviceProcAddr(device, "vkCmdEndPerTileExecutionQCOM");
 #endif //VK_QCOM_tile_shading+VK_QCOM_TILE_SHADING_SPEC_VERSION >= 2
-#if defined(VK_NV_low_latency) && VK_NV_LOW_LATENCY_SPEC_VERSION >= 2 
-    pOut->vkSetLatencySleepModeLegacyNV = deviceProcAddr(device, "vkSetLatencySleepModeLegacyNV");
-    pOut->vkLatencySleepLegacyNV = deviceProcAddr(device, "vkLatencySleepLegacyNV");
-    pOut->vkSetLatencyMarkerLegacyNV = deviceProcAddr(device, "vkSetLatencyMarkerLegacyNV");
-    pOut->vkGetLatencyTimingsLegacyNV = deviceProcAddr(device, "vkGetLatencyTimingsLegacyNV");
-    pOut->vkQueueNotifyOutOfBandLegacyNV = deviceProcAddr(device, "vkQueueNotifyOutOfBandLegacyNV");
-    pOut->vkGetSleepStatusLegacyNV = deviceProcAddr(device, "vkGetSleepStatusLegacyNV");
-    pOut->vkShutdownLatencyDeviceLegacyNV = deviceProcAddr(device, "vkShutdownLatencyDeviceLegacyNV");
-#endif //VK_NV_low_latency+VK_NV_LOW_LATENCY_SPEC_VERSION >= 2
 #if defined(VK_EXT_metal_objects) && VK_EXT_METAL_OBJECTS_SPEC_VERSION >= 2 
     pOut->vkExportMetalObjectsEXT = deviceProcAddr(device, "vkExportMetalObjectsEXT");
 #endif //VK_EXT_metal_objects+VK_EXT_METAL_OBJECTS_SPEC_VERSION >= 2
-#if defined(VK_KHR_synchronization2) 
-    pOut->vkCmdSetEvent2KHR = deviceProcAddr(device, "vkCmdSetEvent2KHR");
-    pOut->vkCmdResetEvent2KHR = deviceProcAddr(device, "vkCmdResetEvent2KHR");
-    pOut->vkCmdWaitEvents2KHR = deviceProcAddr(device, "vkCmdWaitEvents2KHR");
-    pOut->vkCmdPipelineBarrier2KHR = deviceProcAddr(device, "vkCmdPipelineBarrier2KHR");
-    pOut->vkCmdWriteTimestamp2KHR = deviceProcAddr(device, "vkCmdWriteTimestamp2KHR");
-    pOut->vkQueueSubmit2KHR = deviceProcAddr(device, "vkQueueSubmit2KHR");
-#endif //VK_KHR_synchronization2
-#if defined(VK_EXT_descriptor_buffer) 
-    pOut->vkGetDescriptorSetLayoutSizeEXT = deviceProcAddr(device, "vkGetDescriptorSetLayoutSizeEXT");
-    pOut->vkGetDescriptorSetLayoutBindingOffsetEXT = deviceProcAddr(device, "vkGetDescriptorSetLayoutBindingOffsetEXT");
-    pOut->vkGetDescriptorEXT = deviceProcAddr(device, "vkGetDescriptorEXT");
-    pOut->vkCmdBindDescriptorBuffersEXT = deviceProcAddr(device, "vkCmdBindDescriptorBuffersEXT");
-    pOut->vkCmdSetDescriptorBufferOffsetsEXT = deviceProcAddr(device, "vkCmdSetDescriptorBufferOffsetsEXT");
-    pOut->vkCmdBindDescriptorBufferEmbeddedSamplersEXT = deviceProcAddr(device, "vkCmdBindDescriptorBufferEmbeddedSamplersEXT");
-    pOut->vkGetBufferOpaqueCaptureDescriptorDataEXT = deviceProcAddr(device, "vkGetBufferOpaqueCaptureDescriptorDataEXT");
-    pOut->vkGetImageOpaqueCaptureDescriptorDataEXT = deviceProcAddr(device, "vkGetImageOpaqueCaptureDescriptorDataEXT");
-    pOut->vkGetImageViewOpaqueCaptureDescriptorDataEXT = deviceProcAddr(device, "vkGetImageViewOpaqueCaptureDescriptorDataEXT");
-    pOut->vkGetSamplerOpaqueCaptureDescriptorDataEXT = deviceProcAddr(device, "vkGetSamplerOpaqueCaptureDescriptorDataEXT");
-#endif //VK_EXT_descriptor_buffer
-#if defined(VK_EXT_descriptor_buffer) && (defined(VK_KHR_acceleration_structure) || defined(VK_NV_ray_tracing)) 
-    pOut->vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT = deviceProcAddr(device, "vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT");
-#endif //VK_EXT_descriptor_buffer+(VK_KHR_acceleration_structure,VK_NV_ray_tracing)
 #if defined(VK_KHR_device_address_commands) 
     pOut->vkCmdBindIndexBuffer3KHR = deviceProcAddr(device, "vkCmdBindIndexBuffer3KHR");
     pOut->vkCmdBindVertexBuffers3KHR = deviceProcAddr(device, "vkCmdBindVertexBuffers3KHR");
@@ -1047,17 +834,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_EXT_mesh_shader) && (defined(VK_VERSION_1_2) || defined(VK_KHR_draw_indirect_count) || defined(VK_AMD_draw_indirect_count)) 
     pOut->vkCmdDrawMeshTasksIndirectCountEXT = deviceProcAddr(device, "vkCmdDrawMeshTasksIndirectCountEXT");
 #endif //VK_EXT_mesh_shader+(VK_VERSION_1_2,VK_KHR_draw_indirect_count,VK_AMD_draw_indirect_count)
-#if defined(VK_KHR_copy_commands2) 
-    pOut->vkCmdCopyBuffer2KHR = deviceProcAddr(device, "vkCmdCopyBuffer2KHR");
-    pOut->vkCmdCopyImage2KHR = deviceProcAddr(device, "vkCmdCopyImage2KHR");
-    pOut->vkCmdCopyBufferToImage2KHR = deviceProcAddr(device, "vkCmdCopyBufferToImage2KHR");
-    pOut->vkCmdCopyImageToBuffer2KHR = deviceProcAddr(device, "vkCmdCopyImageToBuffer2KHR");
-    pOut->vkCmdBlitImage2KHR = deviceProcAddr(device, "vkCmdBlitImage2KHR");
-    pOut->vkCmdResolveImage2KHR = deviceProcAddr(device, "vkCmdResolveImage2KHR");
-#endif //VK_KHR_copy_commands2
-#if defined(VK_EXT_device_fault) && VK_EXT_DEVICE_FAULT_SPEC_VERSION >= 2 
-    pOut->vkGetDeviceFaultInfoEXT = deviceProcAddr(device, "vkGetDeviceFaultInfoEXT");
-#endif //VK_EXT_device_fault+VK_EXT_DEVICE_FAULT_SPEC_VERSION >= 2
 #if (defined(VK_EXT_vertex_input_dynamic_state) && VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_SPEC_VERSION >= 2) || (defined(VK_EXT_shader_object)) 
     pOut->vkCmdSetVertexInputEXT = deviceProcAddr(device, "vkCmdSetVertexInputEXT");
 #endif //(VK_EXT_vertex_input_dynamic_state+VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_SPEC_VERSION >= 2),(VK_EXT_shader_object)
@@ -1089,13 +865,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_EXT_pipeline_properties) 
     pOut->vkGetPipelinePropertiesEXT = deviceProcAddr(device, "vkGetPipelinePropertiesEXT");
 #endif //VK_EXT_pipeline_properties
-#if (defined(VK_EXT_extended_dynamic_state2)) || (defined(VK_EXT_shader_object)) 
-    pOut->vkCmdSetPatchControlPointsEXT = deviceProcAddr(device, "vkCmdSetPatchControlPointsEXT");
-    pOut->vkCmdSetRasterizerDiscardEnableEXT = deviceProcAddr(device, "vkCmdSetRasterizerDiscardEnableEXT");
-    pOut->vkCmdSetDepthBiasEnableEXT = deviceProcAddr(device, "vkCmdSetDepthBiasEnableEXT");
-    pOut->vkCmdSetLogicOpEXT = deviceProcAddr(device, "vkCmdSetLogicOpEXT");
-    pOut->vkCmdSetPrimitiveRestartEnableEXT = deviceProcAddr(device, "vkCmdSetPrimitiveRestartEnableEXT");
-#endif //(VK_EXT_extended_dynamic_state2),(VK_EXT_shader_object)
 #if defined(VK_EXT_color_write_enable) 
     pOut->vkCmdSetColorWriteEnableEXT = deviceProcAddr(device, "vkCmdSetColorWriteEnableEXT");
 #endif //VK_EXT_color_write_enable
@@ -1106,22 +875,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkCmdDrawMultiEXT = deviceProcAddr(device, "vkCmdDrawMultiEXT");
     pOut->vkCmdDrawMultiIndexedEXT = deviceProcAddr(device, "vkCmdDrawMultiIndexedEXT");
 #endif //VK_EXT_multi_draw
-#if defined(VK_EXT_opacity_micromap) && VK_EXT_OPACITY_MICROMAP_SPEC_VERSION >= 2 
-    pOut->vkCreateMicromapEXT = deviceProcAddr(device, "vkCreateMicromapEXT");
-    pOut->vkDestroyMicromapEXT = deviceProcAddr(device, "vkDestroyMicromapEXT");
-    pOut->vkCmdBuildMicromapsEXT = deviceProcAddr(device, "vkCmdBuildMicromapsEXT");
-    pOut->vkBuildMicromapsEXT = deviceProcAddr(device, "vkBuildMicromapsEXT");
-    pOut->vkCopyMicromapEXT = deviceProcAddr(device, "vkCopyMicromapEXT");
-    pOut->vkCopyMicromapToMemoryEXT = deviceProcAddr(device, "vkCopyMicromapToMemoryEXT");
-    pOut->vkCopyMemoryToMicromapEXT = deviceProcAddr(device, "vkCopyMemoryToMicromapEXT");
-    pOut->vkWriteMicromapsPropertiesEXT = deviceProcAddr(device, "vkWriteMicromapsPropertiesEXT");
-    pOut->vkCmdCopyMicromapEXT = deviceProcAddr(device, "vkCmdCopyMicromapEXT");
-    pOut->vkCmdCopyMicromapToMemoryEXT = deviceProcAddr(device, "vkCmdCopyMicromapToMemoryEXT");
-    pOut->vkCmdCopyMemoryToMicromapEXT = deviceProcAddr(device, "vkCmdCopyMemoryToMicromapEXT");
-    pOut->vkCmdWriteMicromapsPropertiesEXT = deviceProcAddr(device, "vkCmdWriteMicromapsPropertiesEXT");
-    pOut->vkGetDeviceMicromapCompatibilityEXT = deviceProcAddr(device, "vkGetDeviceMicromapCompatibilityEXT");
-    pOut->vkGetMicromapBuildSizesEXT = deviceProcAddr(device, "vkGetMicromapBuildSizesEXT");
-#endif //VK_EXT_opacity_micromap+VK_EXT_OPACITY_MICROMAP_SPEC_VERSION >= 2
 #if defined(VK_HUAWEI_cluster_culling_shader) && VK_HUAWEI_CLUSTER_CULLING_SHADER_SPEC_VERSION >= 3 
     pOut->vkCmdDrawClusterHUAWEI = deviceProcAddr(device, "vkCmdDrawClusterHUAWEI");
     pOut->vkCmdDrawClusterIndirectHUAWEI = deviceProcAddr(device, "vkCmdDrawClusterIndirectHUAWEI");
@@ -1129,11 +882,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_EXT_pageable_device_local_memory) 
     pOut->vkSetDeviceMemoryPriorityEXT = deviceProcAddr(device, "vkSetDeviceMemoryPriorityEXT");
 #endif //VK_EXT_pageable_device_local_memory
-#if defined(VK_KHR_maintenance4) 
-    pOut->vkGetDeviceBufferMemoryRequirementsKHR = deviceProcAddr(device, "vkGetDeviceBufferMemoryRequirementsKHR");
-    pOut->vkGetDeviceImageMemoryRequirementsKHR = deviceProcAddr(device, "vkGetDeviceImageMemoryRequirementsKHR");
-    pOut->vkGetDeviceImageSparseMemoryRequirementsKHR = deviceProcAddr(device, "vkGetDeviceImageSparseMemoryRequirementsKHR");
-#endif //VK_KHR_maintenance4
 #if defined(VK_ARM_scheduling_controls) && VK_ARM_SCHEDULING_CONTROLS_SPEC_VERSION >= 2 
     pOut->vkCmdSetDispatchParametersARM = deviceProcAddr(device, "vkCmdSetDispatchParametersARM");
 #endif //VK_ARM_scheduling_controls+VK_ARM_SCHEDULING_CONTROLS_SPEC_VERSION >= 2
@@ -1141,14 +889,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkGetDescriptorSetLayoutHostMappingInfoVALVE = deviceProcAddr(device, "vkGetDescriptorSetLayoutHostMappingInfoVALVE");
     pOut->vkGetDescriptorSetHostMappingVALVE = deviceProcAddr(device, "vkGetDescriptorSetHostMappingVALVE");
 #endif //VK_VALVE_descriptor_set_host_mapping
-#if defined(VK_NV_copy_memory_indirect) 
-    pOut->vkCmdCopyMemoryIndirectNV = deviceProcAddr(device, "vkCmdCopyMemoryIndirectNV");
-    pOut->vkCmdCopyMemoryToImageIndirectNV = deviceProcAddr(device, "vkCmdCopyMemoryToImageIndirectNV");
-#endif //VK_NV_copy_memory_indirect
-#if defined(VK_NV_memory_decompression) 
-    pOut->vkCmdDecompressMemoryNV = deviceProcAddr(device, "vkCmdDecompressMemoryNV");
-    pOut->vkCmdDecompressMemoryIndirectCountNV = deviceProcAddr(device, "vkCmdDecompressMemoryIndirectCountNV");
-#endif //VK_NV_memory_decompression
 #if defined(VK_NV_device_generated_commands_compute) && VK_NV_DEVICE_GENERATED_COMMANDS_COMPUTE_SPEC_VERSION >= 2 
     pOut->vkGetPipelineIndirectMemoryRequirementsNV = deviceProcAddr(device, "vkGetPipelineIndirectMemoryRequirementsNV");
     pOut->vkCmdUpdatePipelineIndirectBufferNV = deviceProcAddr(device, "vkCmdUpdatePipelineIndirectBufferNV");
@@ -1247,12 +987,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkBindOpticalFlowSessionImageNV = deviceProcAddr(device, "vkBindOpticalFlowSessionImageNV");
     pOut->vkCmdOpticalFlowExecuteNV = deviceProcAddr(device, "vkCmdOpticalFlowExecuteNV");
 #endif //VK_NV_optical_flow
-#if defined(VK_KHR_maintenance5) 
-    pOut->vkCmdBindIndexBuffer2KHR = deviceProcAddr(device, "vkCmdBindIndexBuffer2KHR");
-    pOut->vkGetRenderingAreaGranularityKHR = deviceProcAddr(device, "vkGetRenderingAreaGranularityKHR");
-    pOut->vkGetDeviceImageSubresourceLayoutKHR = deviceProcAddr(device, "vkGetDeviceImageSubresourceLayoutKHR");
-    pOut->vkGetImageSubresourceLayout2KHR = deviceProcAddr(device, "vkGetImageSubresourceLayout2KHR");
-#endif //VK_KHR_maintenance5
 #if defined(VK_AMD_anti_lag) 
     pOut->vkAntiLagUpdateAMD = deviceProcAddr(device, "vkAntiLagUpdateAMD");
 #endif //VK_AMD_anti_lag
@@ -1264,6 +998,8 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkDestroyShaderEXT = deviceProcAddr(device, "vkDestroyShaderEXT");
     pOut->vkGetShaderBinaryDataEXT = deviceProcAddr(device, "vkGetShaderBinaryDataEXT");
     pOut->vkCmdBindShadersEXT = deviceProcAddr(device, "vkCmdBindShadersEXT");
+    pOut->vkCmdSetPatchControlPointsEXT = deviceProcAddr(device, "vkCmdSetPatchControlPointsEXT");
+    pOut->vkCmdSetLogicOpEXT = deviceProcAddr(device, "vkCmdSetLogicOpEXT");
 #endif //VK_EXT_shader_object
 #if (defined(VK_EXT_shader_object) && defined(VK_EXT_depth_clamp_control)) || (defined(VK_EXT_depth_clamp_control)) 
     pOut->vkCmdSetDepthClampRangeEXT = deviceProcAddr(device, "vkCmdSetDepthClampRangeEXT");
@@ -1310,24 +1046,9 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #if defined(VK_QNX_external_memory_screen_buffer) 
     pOut->vkGetScreenBufferPropertiesQNX = deviceProcAddr(device, "vkGetScreenBufferPropertiesQNX");
 #endif //VK_QNX_external_memory_screen_buffer
-#if defined(VK_KHR_line_rasterization) 
-    pOut->vkCmdSetLineStippleKHR = deviceProcAddr(device, "vkCmdSetLineStippleKHR");
-#endif //VK_KHR_line_rasterization
 #if defined(VK_KHR_calibrated_timestamps) 
     pOut->vkGetCalibratedTimestampsKHR = deviceProcAddr(device, "vkGetCalibratedTimestampsKHR");
 #endif //VK_KHR_calibrated_timestamps
-#if defined(VK_KHR_maintenance6) 
-    pOut->vkCmdBindDescriptorSets2KHR = deviceProcAddr(device, "vkCmdBindDescriptorSets2KHR");
-    pOut->vkCmdPushConstants2KHR = deviceProcAddr(device, "vkCmdPushConstants2KHR");
-#endif //VK_KHR_maintenance6
-#if defined(VK_KHR_maintenance6) && defined(VK_KHR_push_descriptor) 
-    pOut->vkCmdPushDescriptorSet2KHR = deviceProcAddr(device, "vkCmdPushDescriptorSet2KHR");
-    pOut->vkCmdPushDescriptorSetWithTemplate2KHR = deviceProcAddr(device, "vkCmdPushDescriptorSetWithTemplate2KHR");
-#endif //VK_KHR_maintenance6+VK_KHR_push_descriptor
-#if defined(VK_KHR_maintenance6) && defined(VK_EXT_descriptor_buffer) 
-    pOut->vkCmdSetDescriptorBufferOffsets2EXT = deviceProcAddr(device, "vkCmdSetDescriptorBufferOffsets2EXT");
-    pOut->vkCmdBindDescriptorBufferEmbeddedSamplers2EXT = deviceProcAddr(device, "vkCmdBindDescriptorBufferEmbeddedSamplers2EXT");
-#endif //VK_KHR_maintenance6+VK_EXT_descriptor_buffer
 #if defined(VK_QCOM_tile_memory_heap) 
     pOut->vkCmdBindTileMemoryQCOM = deviceProcAddr(device, "vkCmdBindTileMemoryQCOM");
 #endif //VK_QCOM_tile_memory_heap
@@ -1379,9 +1100,6 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
     pOut->vkGetShaderInstrumentationValuesARM = deviceProcAddr(device, "vkGetShaderInstrumentationValuesARM");
     pOut->vkClearShaderInstrumentationMetricsARM = deviceProcAddr(device, "vkClearShaderInstrumentationMetricsARM");
 #endif //VK_ARM_shader_instrumentation
-#if defined(VK_EXT_fragment_density_map_offset) 
-    pOut->vkCmdEndRendering2EXT = deviceProcAddr(device, "vkCmdEndRendering2EXT");
-#endif //VK_EXT_fragment_density_map_offset
 #if defined(VK_EXT_custom_resolve) && (defined(VK_KHR_dynamic_rendering) || defined(VK_VERSION_1_3)) 
     pOut->vkCmdBeginCustomResolveEXT = deviceProcAddr(device, "vkCmdBeginCustomResolveEXT");
 #endif //VK_EXT_custom_resolve+(VK_KHR_dynamic_rendering,VK_VERSION_1_3)

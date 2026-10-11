@@ -79,9 +79,9 @@ struct DokInstanceTable {
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
     PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR;
 #endif //VK_KHR_surface
-#if (defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1)) || (defined(VK_KHR_device_group) && defined(VK_KHR_surface)) 
+#if defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1) 
     PFN_vkGetPhysicalDevicePresentRectanglesKHR vkGetPhysicalDevicePresentRectanglesKHR;
-#endif //(VK_KHR_swapchain+VK_VERSION_1_1),(VK_KHR_device_group+VK_KHR_surface)
+#endif //VK_KHR_swapchain+VK_VERSION_1_1
 #if defined(VK_KHR_display) 
     PFN_vkGetPhysicalDeviceDisplayPropertiesKHR vkGetPhysicalDeviceDisplayPropertiesKHR;
     PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR vkGetPhysicalDeviceDisplayPlanePropertiesKHR;
@@ -110,11 +110,6 @@ struct DokInstanceTable {
     PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR;
     PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR vkGetPhysicalDeviceWin32PresentationSupportKHR;
 #endif //VK_KHR_win32_surface
-#if defined(VK_EXT_debug_report) && VK_EXT_DEBUG_REPORT_SPEC_VERSION >= 10 
-    PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT;
-    PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallbackEXT;
-    PFN_vkDebugReportMessageEXT vkDebugReportMessageEXT;
-#endif //VK_EXT_debug_report+VK_EXT_DEBUG_REPORT_SPEC_VERSION >= 10
 #if defined(VK_KHR_video_queue) 
     PFN_vkGetPhysicalDeviceVideoCapabilitiesKHR vkGetPhysicalDeviceVideoCapabilitiesKHR;
     PFN_vkGetPhysicalDeviceVideoFormatPropertiesKHR vkGetPhysicalDeviceVideoFormatPropertiesKHR;
@@ -122,30 +117,9 @@ struct DokInstanceTable {
 #if defined(VK_GGP_stream_descriptor_surface) 
     PFN_vkCreateStreamDescriptorSurfaceGGP vkCreateStreamDescriptorSurfaceGGP;
 #endif //VK_GGP_stream_descriptor_surface
-#if defined(VK_NV_external_memory_capabilities) 
-    PFN_vkGetPhysicalDeviceExternalImageFormatPropertiesNV vkGetPhysicalDeviceExternalImageFormatPropertiesNV;
-#endif //VK_NV_external_memory_capabilities
-#if defined(VK_KHR_get_physical_device_properties2) 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR;
-    PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR;
-    PFN_vkGetPhysicalDeviceFormatProperties2KHR vkGetPhysicalDeviceFormatProperties2KHR;
-    PFN_vkGetPhysicalDeviceImageFormatProperties2KHR vkGetPhysicalDeviceImageFormatProperties2KHR;
-    PFN_vkGetPhysicalDeviceQueueFamilyProperties2KHR vkGetPhysicalDeviceQueueFamilyProperties2KHR;
-    PFN_vkGetPhysicalDeviceMemoryProperties2KHR vkGetPhysicalDeviceMemoryProperties2KHR;
-    PFN_vkGetPhysicalDeviceSparseImageFormatProperties2KHR vkGetPhysicalDeviceSparseImageFormatProperties2KHR;
-#endif //VK_KHR_get_physical_device_properties2
 #if defined(VK_NN_vi_surface) 
     PFN_vkCreateViSurfaceNN vkCreateViSurfaceNN;
 #endif //VK_NN_vi_surface
-#if defined(VK_KHR_device_group_creation) 
-    PFN_vkEnumeratePhysicalDeviceGroupsKHR vkEnumeratePhysicalDeviceGroupsKHR;
-#endif //VK_KHR_device_group_creation
-#if defined(VK_KHR_external_memory_capabilities) 
-    PFN_vkGetPhysicalDeviceExternalBufferPropertiesKHR vkGetPhysicalDeviceExternalBufferPropertiesKHR;
-#endif //VK_KHR_external_memory_capabilities
-#if defined(VK_KHR_external_semaphore_capabilities) 
-    PFN_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR vkGetPhysicalDeviceExternalSemaphorePropertiesKHR;
-#endif //VK_KHR_external_semaphore_capabilities
 #if defined(VK_EXT_direct_mode_display) 
     PFN_vkReleaseDisplayEXT vkReleaseDisplayEXT;
 #endif //VK_EXT_direct_mode_display
@@ -156,9 +130,6 @@ struct DokInstanceTable {
 #if defined(VK_EXT_display_surface_counter) 
     PFN_vkGetPhysicalDeviceSurfaceCapabilities2EXT vkGetPhysicalDeviceSurfaceCapabilities2EXT;
 #endif //VK_EXT_display_surface_counter
-#if defined(VK_KHR_external_fence_capabilities) 
-    PFN_vkGetPhysicalDeviceExternalFencePropertiesKHR vkGetPhysicalDeviceExternalFencePropertiesKHR;
-#endif //VK_KHR_external_fence_capabilities
 #if defined(VK_KHR_performance_query) 
     PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR;
     PFN_vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR;
@@ -173,12 +144,6 @@ struct DokInstanceTable {
     PFN_vkGetDisplayModeProperties2KHR vkGetDisplayModeProperties2KHR;
     PFN_vkGetDisplayPlaneCapabilities2KHR vkGetDisplayPlaneCapabilities2KHR;
 #endif //VK_KHR_get_display_properties2
-#if defined(VK_MVK_ios_surface) && VK_MVK_IOS_SURFACE_SPEC_VERSION >= 3 
-    PFN_vkCreateIOSSurfaceMVK vkCreateIOSSurfaceMVK;
-#endif //VK_MVK_ios_surface+VK_MVK_IOS_SURFACE_SPEC_VERSION >= 3
-#if defined(VK_MVK_macos_surface) && VK_MVK_MACOS_SURFACE_SPEC_VERSION >= 3 
-    PFN_vkCreateMacOSSurfaceMVK vkCreateMacOSSurfaceMVK;
-#endif //VK_MVK_macos_surface+VK_MVK_MACOS_SURFACE_SPEC_VERSION >= 3
 #if defined(VK_EXT_debug_utils) && VK_EXT_DEBUG_UTILS_SPEC_VERSION >= 2 
     PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT;
     PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT;
@@ -190,9 +155,6 @@ struct DokInstanceTable {
 #if defined(VK_EXT_sample_locations) 
     PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT vkGetPhysicalDeviceMultisamplePropertiesEXT;
 #endif //VK_EXT_sample_locations
-#if defined(VK_EXT_calibrated_timestamps) && VK_EXT_CALIBRATED_TIMESTAMPS_SPEC_VERSION >= 2 
-    PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT vkGetPhysicalDeviceCalibrateableTimeDomainsEXT;
-#endif //VK_EXT_calibrated_timestamps+VK_EXT_CALIBRATED_TIMESTAMPS_SPEC_VERSION >= 2
 #if defined(VK_FUCHSIA_imagepipe_surface) 
     PFN_vkCreateImagePipeSurfaceFUCHSIA vkCreateImagePipeSurfaceFUCHSIA;
 #endif //VK_FUCHSIA_imagepipe_surface
@@ -202,9 +164,6 @@ struct DokInstanceTable {
 #if defined(VK_KHR_fragment_shading_rate) 
     PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR vkGetPhysicalDeviceFragmentShadingRatesKHR;
 #endif //VK_KHR_fragment_shading_rate
-#if defined(VK_EXT_tooling_info) 
-    PFN_vkGetPhysicalDeviceToolPropertiesEXT vkGetPhysicalDeviceToolPropertiesEXT;
-#endif //VK_EXT_tooling_info
 #if defined(VK_NV_cooperative_matrix) 
     PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesNV vkGetPhysicalDeviceCooperativeMatrixPropertiesNV;
 #endif //VK_NV_cooperative_matrix
@@ -504,23 +463,14 @@ struct DokDeviceTable {
     PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
     PFN_vkQueuePresentKHR vkQueuePresentKHR;
 #endif //VK_KHR_swapchain
-#if (defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1)) || (defined(VK_KHR_device_group) && defined(VK_KHR_surface)) 
+#if defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1) 
     PFN_vkGetDeviceGroupPresentCapabilitiesKHR vkGetDeviceGroupPresentCapabilitiesKHR;
     PFN_vkGetDeviceGroupSurfacePresentModesKHR vkGetDeviceGroupSurfacePresentModesKHR;
-#endif //(VK_KHR_swapchain+VK_VERSION_1_1),(VK_KHR_device_group+VK_KHR_surface)
-#if (defined(VK_KHR_swapchain) && defined(VK_VERSION_1_1)) || (defined(VK_KHR_device_group) && defined(VK_KHR_swapchain)) 
     PFN_vkAcquireNextImage2KHR vkAcquireNextImage2KHR;
-#endif //(VK_KHR_swapchain+VK_VERSION_1_1),(VK_KHR_device_group+VK_KHR_swapchain)
+#endif //VK_KHR_swapchain+VK_VERSION_1_1
 #if defined(VK_KHR_display_swapchain) 
     PFN_vkCreateSharedSwapchainsKHR vkCreateSharedSwapchainsKHR;
 #endif //VK_KHR_display_swapchain
-#if defined(VK_EXT_debug_marker) && VK_EXT_DEBUG_MARKER_SPEC_VERSION >= 4 
-    PFN_vkDebugMarkerSetObjectTagEXT vkDebugMarkerSetObjectTagEXT;
-    PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectNameEXT;
-    PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBeginEXT;
-    PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEndEXT;
-    PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsertEXT;
-#endif //VK_EXT_debug_marker+VK_EXT_DEBUG_MARKER_SPEC_VERSION >= 4
 #if defined(VK_KHR_video_queue) 
     PFN_vkCreateVideoSessionKHR vkCreateVideoSessionKHR;
     PFN_vkDestroyVideoSessionKHR vkDestroyVideoSessionKHR;
@@ -557,28 +507,9 @@ struct DokDeviceTable {
     PFN_vkGetImageViewAddressNVX vkGetImageViewAddressNVX;
     PFN_vkGetDeviceCombinedImageSamplerIndexNVX vkGetDeviceCombinedImageSamplerIndexNVX;
 #endif //VK_NVX_image_view_handle+VK_NVX_IMAGE_VIEW_HANDLE_SPEC_VERSION >= 4
-#if defined(VK_AMD_draw_indirect_count) && VK_AMD_DRAW_INDIRECT_COUNT_SPEC_VERSION >= 2 
-    PFN_vkCmdDrawIndirectCountAMD vkCmdDrawIndirectCountAMD;
-    PFN_vkCmdDrawIndexedIndirectCountAMD vkCmdDrawIndexedIndirectCountAMD;
-#endif //VK_AMD_draw_indirect_count+VK_AMD_DRAW_INDIRECT_COUNT_SPEC_VERSION >= 2
 #if defined(VK_AMD_shader_info) 
     PFN_vkGetShaderInfoAMD vkGetShaderInfoAMD;
 #endif //VK_AMD_shader_info
-#if defined(VK_KHR_dynamic_rendering) 
-    PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR;
-    PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR;
-#endif //VK_KHR_dynamic_rendering
-#if defined(VK_NV_external_memory_win32) 
-    PFN_vkGetMemoryWin32HandleNV vkGetMemoryWin32HandleNV;
-#endif //VK_NV_external_memory_win32
-#if defined(VK_KHR_device_group) 
-    PFN_vkGetDeviceGroupPeerMemoryFeaturesKHR vkGetDeviceGroupPeerMemoryFeaturesKHR;
-    PFN_vkCmdSetDeviceMaskKHR vkCmdSetDeviceMaskKHR;
-    PFN_vkCmdDispatchBaseKHR vkCmdDispatchBaseKHR;
-#endif //VK_KHR_device_group
-#if defined(VK_KHR_maintenance1) 
-    PFN_vkTrimCommandPoolKHR vkTrimCommandPoolKHR;
-#endif //VK_KHR_maintenance1
 #if defined(VK_KHR_external_memory_win32) 
     PFN_vkGetMemoryWin32HandleKHR vkGetMemoryWin32HandleKHR;
     PFN_vkGetMemoryWin32HandlePropertiesKHR vkGetMemoryWin32HandlePropertiesKHR;
@@ -595,21 +526,10 @@ struct DokDeviceTable {
     PFN_vkImportSemaphoreFdKHR vkImportSemaphoreFdKHR;
     PFN_vkGetSemaphoreFdKHR vkGetSemaphoreFdKHR;
 #endif //VK_KHR_external_semaphore_fd
-#if defined(VK_KHR_push_descriptor) 
-    PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR;
-#endif //VK_KHR_push_descriptor
-#if (defined(VK_KHR_push_descriptor) && (defined(VK_VERSION_1_1) || defined(VK_KHR_descriptor_update_template))) || (defined(VK_KHR_descriptor_update_template) && defined(VK_KHR_push_descriptor)) 
-    PFN_vkCmdPushDescriptorSetWithTemplateKHR vkCmdPushDescriptorSetWithTemplateKHR;
-#endif //(VK_KHR_push_descriptor+(VK_VERSION_1_1,VK_KHR_descriptor_update_template)),(VK_KHR_descriptor_update_template+VK_KHR_push_descriptor)
 #if defined(VK_EXT_conditional_rendering) && VK_EXT_CONDITIONAL_RENDERING_SPEC_VERSION >= 2 
     PFN_vkCmdBeginConditionalRenderingEXT vkCmdBeginConditionalRenderingEXT;
     PFN_vkCmdEndConditionalRenderingEXT vkCmdEndConditionalRenderingEXT;
 #endif //VK_EXT_conditional_rendering+VK_EXT_CONDITIONAL_RENDERING_SPEC_VERSION >= 2
-#if defined(VK_KHR_descriptor_update_template) 
-    PFN_vkCreateDescriptorUpdateTemplateKHR vkCreateDescriptorUpdateTemplateKHR;
-    PFN_vkDestroyDescriptorUpdateTemplateKHR vkDestroyDescriptorUpdateTemplateKHR;
-    PFN_vkUpdateDescriptorSetWithTemplateKHR vkUpdateDescriptorSetWithTemplateKHR;
-#endif //VK_KHR_descriptor_update_template
 #if defined(VK_NV_clip_space_w_scaling) 
     PFN_vkCmdSetViewportWScalingNV vkCmdSetViewportWScalingNV;
 #endif //VK_NV_clip_space_w_scaling
@@ -631,12 +551,6 @@ struct DokDeviceTable {
 #if defined(VK_EXT_hdr_metadata) && VK_EXT_HDR_METADATA_SPEC_VERSION >= 3 
     PFN_vkSetHdrMetadataEXT vkSetHdrMetadataEXT;
 #endif //VK_EXT_hdr_metadata+VK_EXT_HDR_METADATA_SPEC_VERSION >= 3
-#if defined(VK_KHR_create_renderpass2) 
-    PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR;
-    PFN_vkCmdBeginRenderPass2KHR vkCmdBeginRenderPass2KHR;
-    PFN_vkCmdNextSubpass2KHR vkCmdNextSubpass2KHR;
-    PFN_vkCmdEndRenderPass2KHR vkCmdEndRenderPass2KHR;
-#endif //VK_KHR_create_renderpass2
 #if defined(VK_KHR_shared_presentable_image) 
     PFN_vkGetSwapchainStatusKHR vkGetSwapchainStatusKHR;
 #endif //VK_KHR_shared_presentable_image
@@ -707,11 +621,6 @@ struct DokDeviceTable {
 #if defined(VK_EXT_sample_locations) 
     PFN_vkCmdSetSampleLocationsEXT vkCmdSetSampleLocationsEXT;
 #endif //VK_EXT_sample_locations
-#if defined(VK_KHR_get_memory_requirements2) 
-    PFN_vkGetImageMemoryRequirements2KHR vkGetImageMemoryRequirements2KHR;
-    PFN_vkGetBufferMemoryRequirements2KHR vkGetBufferMemoryRequirements2KHR;
-    PFN_vkGetImageSparseMemoryRequirements2KHR vkGetImageSparseMemoryRequirements2KHR;
-#endif //VK_KHR_get_memory_requirements2
 #if defined(VK_KHR_acceleration_structure) 
     PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
     PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
@@ -739,14 +648,6 @@ struct DokDeviceTable {
     PFN_vkGetRayTracingShaderGroupStackSizeKHR vkGetRayTracingShaderGroupStackSizeKHR;
     PFN_vkCmdSetRayTracingPipelineStackSizeKHR vkCmdSetRayTracingPipelineStackSizeKHR;
 #endif //VK_KHR_ray_tracing_pipeline
-#if defined(VK_KHR_sampler_ycbcr_conversion) 
-    PFN_vkCreateSamplerYcbcrConversionKHR vkCreateSamplerYcbcrConversionKHR;
-    PFN_vkDestroySamplerYcbcrConversionKHR vkDestroySamplerYcbcrConversionKHR;
-#endif //VK_KHR_sampler_ycbcr_conversion
-#if defined(VK_KHR_bind_memory2) 
-    PFN_vkBindBufferMemory2KHR vkBindBufferMemory2KHR;
-    PFN_vkBindImageMemory2KHR vkBindImageMemory2KHR;
-#endif //VK_KHR_bind_memory2
 #if defined(VK_EXT_image_drm_format_modifier) && VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_SPEC_VERSION >= 2 
     PFN_vkGetImageDrmFormatModifierPropertiesEXT vkGetImageDrmFormatModifierPropertiesEXT;
 #endif //VK_EXT_image_drm_format_modifier+VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_SPEC_VERSION >= 2
@@ -761,27 +662,6 @@ struct DokDeviceTable {
     PFN_vkCmdSetViewportShadingRatePaletteNV vkCmdSetViewportShadingRatePaletteNV;
     PFN_vkCmdSetCoarseSampleOrderNV vkCmdSetCoarseSampleOrderNV;
 #endif //VK_NV_shading_rate_image+VK_NV_SHADING_RATE_IMAGE_SPEC_VERSION >= 3
-#if defined(VK_NV_ray_tracing) && VK_NV_RAY_TRACING_SPEC_VERSION >= 3 
-    PFN_vkCreateAccelerationStructureNV vkCreateAccelerationStructureNV;
-    PFN_vkDestroyAccelerationStructureNV vkDestroyAccelerationStructureNV;
-    PFN_vkGetAccelerationStructureMemoryRequirementsNV vkGetAccelerationStructureMemoryRequirementsNV;
-    PFN_vkBindAccelerationStructureMemoryNV vkBindAccelerationStructureMemoryNV;
-    PFN_vkCmdBuildAccelerationStructureNV vkCmdBuildAccelerationStructureNV;
-    PFN_vkCmdCopyAccelerationStructureNV vkCmdCopyAccelerationStructureNV;
-    PFN_vkCmdTraceRaysNV vkCmdTraceRaysNV;
-    PFN_vkCreateRayTracingPipelinesNV vkCreateRayTracingPipelinesNV;
-    PFN_vkGetRayTracingShaderGroupHandlesNV vkGetRayTracingShaderGroupHandlesNV;
-    PFN_vkGetAccelerationStructureHandleNV vkGetAccelerationStructureHandleNV;
-    PFN_vkCmdWriteAccelerationStructuresPropertiesNV vkCmdWriteAccelerationStructuresPropertiesNV;
-    PFN_vkCompileDeferredNV vkCompileDeferredNV;
-#endif //VK_NV_ray_tracing+VK_NV_RAY_TRACING_SPEC_VERSION >= 3
-#if defined(VK_KHR_maintenance3) 
-    PFN_vkGetDescriptorSetLayoutSupportKHR vkGetDescriptorSetLayoutSupportKHR;
-#endif //VK_KHR_maintenance3
-#if defined(VK_KHR_draw_indirect_count) 
-    PFN_vkCmdDrawIndirectCountKHR vkCmdDrawIndirectCountKHR;
-    PFN_vkCmdDrawIndexedIndirectCountKHR vkCmdDrawIndexedIndirectCountKHR;
-#endif //VK_KHR_draw_indirect_count
 #if defined(VK_EXT_external_memory_host) 
     PFN_vkGetMemoryHostPointerPropertiesEXT vkGetMemoryHostPointerPropertiesEXT;
 #endif //VK_EXT_external_memory_host
@@ -791,9 +671,6 @@ struct DokDeviceTable {
 #if defined(VK_AMD_buffer_marker) && (defined(VK_VERSION_1_3) || defined(VK_KHR_synchronization2)) 
     PFN_vkCmdWriteBufferMarker2AMD vkCmdWriteBufferMarker2AMD;
 #endif //VK_AMD_buffer_marker+(VK_VERSION_1_3,VK_KHR_synchronization2)
-#if defined(VK_EXT_calibrated_timestamps) && VK_EXT_CALIBRATED_TIMESTAMPS_SPEC_VERSION >= 2 
-    PFN_vkGetCalibratedTimestampsEXT vkGetCalibratedTimestampsEXT;
-#endif //VK_EXT_calibrated_timestamps+VK_EXT_CALIBRATED_TIMESTAMPS_SPEC_VERSION >= 2
 #if defined(VK_NV_mesh_shader) 
     PFN_vkCmdDrawMeshTasksNV vkCmdDrawMeshTasksNV;
     PFN_vkCmdDrawMeshTasksIndirectNV vkCmdDrawMeshTasksIndirectNV;
@@ -812,11 +689,6 @@ struct DokDeviceTable {
 #if defined(VK_NV_device_diagnostic_checkpoints) && (defined(VK_VERSION_1_3) || defined(VK_KHR_synchronization2)) 
     PFN_vkGetQueueCheckpointData2NV vkGetQueueCheckpointData2NV;
 #endif //VK_NV_device_diagnostic_checkpoints+(VK_VERSION_1_3,VK_KHR_synchronization2)
-#if defined(VK_KHR_timeline_semaphore) 
-    PFN_vkGetSemaphoreCounterValueKHR vkGetSemaphoreCounterValueKHR;
-    PFN_vkWaitSemaphoresKHR vkWaitSemaphoresKHR;
-    PFN_vkSignalSemaphoreKHR vkSignalSemaphoreKHR;
-#endif //VK_KHR_timeline_semaphore
 #if defined(VK_EXT_present_timing) && VK_EXT_PRESENT_TIMING_SPEC_VERSION >= 3 
     PFN_vkSetSwapchainPresentTimingQueueSizeEXT vkSetSwapchainPresentTimingQueueSizeEXT;
     PFN_vkGetSwapchainTimingPropertiesEXT vkGetSwapchainTimingPropertiesEXT;
@@ -840,13 +712,6 @@ struct DokDeviceTable {
 #if defined(VK_KHR_fragment_shading_rate) 
     PFN_vkCmdSetFragmentShadingRateKHR vkCmdSetFragmentShadingRateKHR;
 #endif //VK_KHR_fragment_shading_rate
-#if defined(VK_KHR_dynamic_rendering_local_read) 
-    PFN_vkCmdSetRenderingAttachmentLocationsKHR vkCmdSetRenderingAttachmentLocationsKHR;
-    PFN_vkCmdSetRenderingInputAttachmentIndicesKHR vkCmdSetRenderingInputAttachmentIndicesKHR;
-#endif //VK_KHR_dynamic_rendering_local_read
-#if defined(VK_EXT_buffer_device_address) && VK_EXT_BUFFER_DEVICE_ADDRESS_SPEC_VERSION >= 2 
-    PFN_vkGetBufferDeviceAddressEXT vkGetBufferDeviceAddressEXT;
-#endif //VK_EXT_buffer_device_address+VK_EXT_BUFFER_DEVICE_ADDRESS_SPEC_VERSION >= 2
 #if defined(VK_KHR_present_wait) 
     PFN_vkWaitForPresentKHR vkWaitForPresentKHR;
 #endif //VK_KHR_present_wait
@@ -857,31 +722,6 @@ struct DokDeviceTable {
 #if defined(VK_EXT_full_screen_exclusive) && (defined(VK_KHR_device_group) || defined(VK_VERSION_1_1)) 
     PFN_vkGetDeviceGroupSurfacePresentModes2EXT vkGetDeviceGroupSurfacePresentModes2EXT;
 #endif //VK_EXT_full_screen_exclusive+(VK_KHR_device_group,VK_VERSION_1_1)
-#if defined(VK_KHR_buffer_device_address) 
-    PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR;
-    PFN_vkGetBufferOpaqueCaptureAddressKHR vkGetBufferOpaqueCaptureAddressKHR;
-    PFN_vkGetDeviceMemoryOpaqueCaptureAddressKHR vkGetDeviceMemoryOpaqueCaptureAddressKHR;
-#endif //VK_KHR_buffer_device_address
-#if defined(VK_EXT_line_rasterization) 
-    PFN_vkCmdSetLineStippleEXT vkCmdSetLineStippleEXT;
-#endif //VK_EXT_line_rasterization
-#if defined(VK_EXT_host_query_reset) 
-    PFN_vkResetQueryPoolEXT vkResetQueryPoolEXT;
-#endif //VK_EXT_host_query_reset
-#if (defined(VK_EXT_extended_dynamic_state)) || (defined(VK_EXT_shader_object)) 
-    PFN_vkCmdSetCullModeEXT vkCmdSetCullModeEXT;
-    PFN_vkCmdSetFrontFaceEXT vkCmdSetFrontFaceEXT;
-    PFN_vkCmdSetPrimitiveTopologyEXT vkCmdSetPrimitiveTopologyEXT;
-    PFN_vkCmdSetViewportWithCountEXT vkCmdSetViewportWithCountEXT;
-    PFN_vkCmdSetScissorWithCountEXT vkCmdSetScissorWithCountEXT;
-    PFN_vkCmdBindVertexBuffers2EXT vkCmdBindVertexBuffers2EXT;
-    PFN_vkCmdSetDepthTestEnableEXT vkCmdSetDepthTestEnableEXT;
-    PFN_vkCmdSetDepthWriteEnableEXT vkCmdSetDepthWriteEnableEXT;
-    PFN_vkCmdSetDepthCompareOpEXT vkCmdSetDepthCompareOpEXT;
-    PFN_vkCmdSetDepthBoundsTestEnableEXT vkCmdSetDepthBoundsTestEnableEXT;
-    PFN_vkCmdSetStencilTestEnableEXT vkCmdSetStencilTestEnableEXT;
-    PFN_vkCmdSetStencilOpEXT vkCmdSetStencilOpEXT;
-#endif //(VK_EXT_extended_dynamic_state),(VK_EXT_shader_object)
 #if defined(VK_KHR_deferred_host_operations) 
     PFN_vkCreateDeferredOperationKHR vkCreateDeferredOperationKHR;
     PFN_vkDestroyDeferredOperationKHR vkDestroyDeferredOperationKHR;
@@ -894,22 +734,6 @@ struct DokDeviceTable {
     PFN_vkGetPipelineExecutableStatisticsKHR vkGetPipelineExecutableStatisticsKHR;
     PFN_vkGetPipelineExecutableInternalRepresentationsKHR vkGetPipelineExecutableInternalRepresentationsKHR;
 #endif //VK_KHR_pipeline_executable_properties
-#if defined(VK_EXT_host_image_copy) 
-    PFN_vkCopyMemoryToImageEXT vkCopyMemoryToImageEXT;
-    PFN_vkCopyImageToMemoryEXT vkCopyImageToMemoryEXT;
-    PFN_vkCopyImageToImageEXT vkCopyImageToImageEXT;
-    PFN_vkTransitionImageLayoutEXT vkTransitionImageLayoutEXT;
-#endif //VK_EXT_host_image_copy
-#if (defined(VK_EXT_host_image_copy)) || (defined(VK_EXT_image_compression_control)) 
-    PFN_vkGetImageSubresourceLayout2EXT vkGetImageSubresourceLayout2EXT;
-#endif //(VK_EXT_host_image_copy),(VK_EXT_image_compression_control)
-#if defined(VK_KHR_map_memory2) 
-    PFN_vkMapMemory2KHR vkMapMemory2KHR;
-    PFN_vkUnmapMemory2KHR vkUnmapMemory2KHR;
-#endif //VK_KHR_map_memory2
-#if defined(VK_EXT_swapchain_maintenance1) 
-    PFN_vkReleaseSwapchainImagesEXT vkReleaseSwapchainImagesEXT;
-#endif //VK_EXT_swapchain_maintenance1
 #if defined(VK_NV_device_generated_commands) && VK_NV_DEVICE_GENERATED_COMMANDS_SPEC_VERSION >= 3 
     PFN_vkGetGeneratedCommandsMemoryRequirementsNV vkGetGeneratedCommandsMemoryRequirementsNV;
     PFN_vkCmdPreprocessGeneratedCommandsNV vkCmdPreprocessGeneratedCommandsNV;
@@ -921,12 +745,6 @@ struct DokDeviceTable {
 #if defined(VK_EXT_depth_bias_control) 
     PFN_vkCmdSetDepthBias2EXT vkCmdSetDepthBias2EXT;
 #endif //VK_EXT_depth_bias_control
-#if defined(VK_EXT_private_data) 
-    PFN_vkCreatePrivateDataSlotEXT vkCreatePrivateDataSlotEXT;
-    PFN_vkDestroyPrivateDataSlotEXT vkDestroyPrivateDataSlotEXT;
-    PFN_vkSetPrivateDataEXT vkSetPrivateDataEXT;
-    PFN_vkGetPrivateDataEXT vkGetPrivateDataEXT;
-#endif //VK_EXT_private_data
 #if defined(VK_KHR_video_encode_queue) 
     PFN_vkGetEncodedVideoSessionParametersKHR vkGetEncodedVideoSessionParametersKHR;
     PFN_vkCmdEncodeVideoKHR vkCmdEncodeVideoKHR;
@@ -947,41 +765,9 @@ struct DokDeviceTable {
     PFN_vkCmdBeginPerTileExecutionQCOM vkCmdBeginPerTileExecutionQCOM;
     PFN_vkCmdEndPerTileExecutionQCOM vkCmdEndPerTileExecutionQCOM;
 #endif //VK_QCOM_tile_shading+VK_QCOM_TILE_SHADING_SPEC_VERSION >= 2
-#if defined(VK_NV_low_latency) && VK_NV_LOW_LATENCY_SPEC_VERSION >= 2 
-    PFN_vkSetLatencySleepModeLegacyNV vkSetLatencySleepModeLegacyNV;
-    PFN_vkLatencySleepLegacyNV vkLatencySleepLegacyNV;
-    PFN_vkSetLatencyMarkerLegacyNV vkSetLatencyMarkerLegacyNV;
-    PFN_vkGetLatencyTimingsLegacyNV vkGetLatencyTimingsLegacyNV;
-    PFN_vkQueueNotifyOutOfBandLegacyNV vkQueueNotifyOutOfBandLegacyNV;
-    PFN_vkGetSleepStatusLegacyNV vkGetSleepStatusLegacyNV;
-    PFN_vkShutdownLatencyDeviceLegacyNV vkShutdownLatencyDeviceLegacyNV;
-#endif //VK_NV_low_latency+VK_NV_LOW_LATENCY_SPEC_VERSION >= 2
 #if defined(VK_EXT_metal_objects) && VK_EXT_METAL_OBJECTS_SPEC_VERSION >= 2 
     PFN_vkExportMetalObjectsEXT vkExportMetalObjectsEXT;
 #endif //VK_EXT_metal_objects+VK_EXT_METAL_OBJECTS_SPEC_VERSION >= 2
-#if defined(VK_KHR_synchronization2) 
-    PFN_vkCmdSetEvent2KHR vkCmdSetEvent2KHR;
-    PFN_vkCmdResetEvent2KHR vkCmdResetEvent2KHR;
-    PFN_vkCmdWaitEvents2KHR vkCmdWaitEvents2KHR;
-    PFN_vkCmdPipelineBarrier2KHR vkCmdPipelineBarrier2KHR;
-    PFN_vkCmdWriteTimestamp2KHR vkCmdWriteTimestamp2KHR;
-    PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
-#endif //VK_KHR_synchronization2
-#if defined(VK_EXT_descriptor_buffer) 
-    PFN_vkGetDescriptorSetLayoutSizeEXT vkGetDescriptorSetLayoutSizeEXT;
-    PFN_vkGetDescriptorSetLayoutBindingOffsetEXT vkGetDescriptorSetLayoutBindingOffsetEXT;
-    PFN_vkGetDescriptorEXT vkGetDescriptorEXT;
-    PFN_vkCmdBindDescriptorBuffersEXT vkCmdBindDescriptorBuffersEXT;
-    PFN_vkCmdSetDescriptorBufferOffsetsEXT vkCmdSetDescriptorBufferOffsetsEXT;
-    PFN_vkCmdBindDescriptorBufferEmbeddedSamplersEXT vkCmdBindDescriptorBufferEmbeddedSamplersEXT;
-    PFN_vkGetBufferOpaqueCaptureDescriptorDataEXT vkGetBufferOpaqueCaptureDescriptorDataEXT;
-    PFN_vkGetImageOpaqueCaptureDescriptorDataEXT vkGetImageOpaqueCaptureDescriptorDataEXT;
-    PFN_vkGetImageViewOpaqueCaptureDescriptorDataEXT vkGetImageViewOpaqueCaptureDescriptorDataEXT;
-    PFN_vkGetSamplerOpaqueCaptureDescriptorDataEXT vkGetSamplerOpaqueCaptureDescriptorDataEXT;
-#endif //VK_EXT_descriptor_buffer
-#if defined(VK_EXT_descriptor_buffer) && (defined(VK_KHR_acceleration_structure) || defined(VK_NV_ray_tracing)) 
-    PFN_vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT;
-#endif //VK_EXT_descriptor_buffer+(VK_KHR_acceleration_structure,VK_NV_ray_tracing)
 #if defined(VK_KHR_device_address_commands) 
     PFN_vkCmdBindIndexBuffer3KHR vkCmdBindIndexBuffer3KHR;
     PFN_vkCmdBindVertexBuffers3KHR vkCmdBindVertexBuffers3KHR;
@@ -1030,17 +816,6 @@ struct DokDeviceTable {
 #if defined(VK_EXT_mesh_shader) && (defined(VK_VERSION_1_2) || defined(VK_KHR_draw_indirect_count) || defined(VK_AMD_draw_indirect_count)) 
     PFN_vkCmdDrawMeshTasksIndirectCountEXT vkCmdDrawMeshTasksIndirectCountEXT;
 #endif //VK_EXT_mesh_shader+(VK_VERSION_1_2,VK_KHR_draw_indirect_count,VK_AMD_draw_indirect_count)
-#if defined(VK_KHR_copy_commands2) 
-    PFN_vkCmdCopyBuffer2KHR vkCmdCopyBuffer2KHR;
-    PFN_vkCmdCopyImage2KHR vkCmdCopyImage2KHR;
-    PFN_vkCmdCopyBufferToImage2KHR vkCmdCopyBufferToImage2KHR;
-    PFN_vkCmdCopyImageToBuffer2KHR vkCmdCopyImageToBuffer2KHR;
-    PFN_vkCmdBlitImage2KHR vkCmdBlitImage2KHR;
-    PFN_vkCmdResolveImage2KHR vkCmdResolveImage2KHR;
-#endif //VK_KHR_copy_commands2
-#if defined(VK_EXT_device_fault) && VK_EXT_DEVICE_FAULT_SPEC_VERSION >= 2 
-    PFN_vkGetDeviceFaultInfoEXT vkGetDeviceFaultInfoEXT;
-#endif //VK_EXT_device_fault+VK_EXT_DEVICE_FAULT_SPEC_VERSION >= 2
 #if (defined(VK_EXT_vertex_input_dynamic_state) && VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_SPEC_VERSION >= 2) || (defined(VK_EXT_shader_object)) 
     PFN_vkCmdSetVertexInputEXT vkCmdSetVertexInputEXT;
 #endif //(VK_EXT_vertex_input_dynamic_state+VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_SPEC_VERSION >= 2),(VK_EXT_shader_object)
@@ -1072,13 +847,6 @@ struct DokDeviceTable {
 #if defined(VK_EXT_pipeline_properties) 
     PFN_vkGetPipelinePropertiesEXT vkGetPipelinePropertiesEXT;
 #endif //VK_EXT_pipeline_properties
-#if (defined(VK_EXT_extended_dynamic_state2)) || (defined(VK_EXT_shader_object)) 
-    PFN_vkCmdSetPatchControlPointsEXT vkCmdSetPatchControlPointsEXT;
-    PFN_vkCmdSetRasterizerDiscardEnableEXT vkCmdSetRasterizerDiscardEnableEXT;
-    PFN_vkCmdSetDepthBiasEnableEXT vkCmdSetDepthBiasEnableEXT;
-    PFN_vkCmdSetLogicOpEXT vkCmdSetLogicOpEXT;
-    PFN_vkCmdSetPrimitiveRestartEnableEXT vkCmdSetPrimitiveRestartEnableEXT;
-#endif //(VK_EXT_extended_dynamic_state2),(VK_EXT_shader_object)
 #if defined(VK_EXT_color_write_enable) 
     PFN_vkCmdSetColorWriteEnableEXT vkCmdSetColorWriteEnableEXT;
 #endif //VK_EXT_color_write_enable
@@ -1089,22 +857,6 @@ struct DokDeviceTable {
     PFN_vkCmdDrawMultiEXT vkCmdDrawMultiEXT;
     PFN_vkCmdDrawMultiIndexedEXT vkCmdDrawMultiIndexedEXT;
 #endif //VK_EXT_multi_draw
-#if defined(VK_EXT_opacity_micromap) && VK_EXT_OPACITY_MICROMAP_SPEC_VERSION >= 2 
-    PFN_vkCreateMicromapEXT vkCreateMicromapEXT;
-    PFN_vkDestroyMicromapEXT vkDestroyMicromapEXT;
-    PFN_vkCmdBuildMicromapsEXT vkCmdBuildMicromapsEXT;
-    PFN_vkBuildMicromapsEXT vkBuildMicromapsEXT;
-    PFN_vkCopyMicromapEXT vkCopyMicromapEXT;
-    PFN_vkCopyMicromapToMemoryEXT vkCopyMicromapToMemoryEXT;
-    PFN_vkCopyMemoryToMicromapEXT vkCopyMemoryToMicromapEXT;
-    PFN_vkWriteMicromapsPropertiesEXT vkWriteMicromapsPropertiesEXT;
-    PFN_vkCmdCopyMicromapEXT vkCmdCopyMicromapEXT;
-    PFN_vkCmdCopyMicromapToMemoryEXT vkCmdCopyMicromapToMemoryEXT;
-    PFN_vkCmdCopyMemoryToMicromapEXT vkCmdCopyMemoryToMicromapEXT;
-    PFN_vkCmdWriteMicromapsPropertiesEXT vkCmdWriteMicromapsPropertiesEXT;
-    PFN_vkGetDeviceMicromapCompatibilityEXT vkGetDeviceMicromapCompatibilityEXT;
-    PFN_vkGetMicromapBuildSizesEXT vkGetMicromapBuildSizesEXT;
-#endif //VK_EXT_opacity_micromap+VK_EXT_OPACITY_MICROMAP_SPEC_VERSION >= 2
 #if defined(VK_HUAWEI_cluster_culling_shader) && VK_HUAWEI_CLUSTER_CULLING_SHADER_SPEC_VERSION >= 3 
     PFN_vkCmdDrawClusterHUAWEI vkCmdDrawClusterHUAWEI;
     PFN_vkCmdDrawClusterIndirectHUAWEI vkCmdDrawClusterIndirectHUAWEI;
@@ -1112,11 +864,6 @@ struct DokDeviceTable {
 #if defined(VK_EXT_pageable_device_local_memory) 
     PFN_vkSetDeviceMemoryPriorityEXT vkSetDeviceMemoryPriorityEXT;
 #endif //VK_EXT_pageable_device_local_memory
-#if defined(VK_KHR_maintenance4) 
-    PFN_vkGetDeviceBufferMemoryRequirementsKHR vkGetDeviceBufferMemoryRequirementsKHR;
-    PFN_vkGetDeviceImageMemoryRequirementsKHR vkGetDeviceImageMemoryRequirementsKHR;
-    PFN_vkGetDeviceImageSparseMemoryRequirementsKHR vkGetDeviceImageSparseMemoryRequirementsKHR;
-#endif //VK_KHR_maintenance4
 #if defined(VK_ARM_scheduling_controls) && VK_ARM_SCHEDULING_CONTROLS_SPEC_VERSION >= 2 
     PFN_vkCmdSetDispatchParametersARM vkCmdSetDispatchParametersARM;
 #endif //VK_ARM_scheduling_controls+VK_ARM_SCHEDULING_CONTROLS_SPEC_VERSION >= 2
@@ -1124,14 +871,6 @@ struct DokDeviceTable {
     PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE vkGetDescriptorSetLayoutHostMappingInfoVALVE;
     PFN_vkGetDescriptorSetHostMappingVALVE vkGetDescriptorSetHostMappingVALVE;
 #endif //VK_VALVE_descriptor_set_host_mapping
-#if defined(VK_NV_copy_memory_indirect) 
-    PFN_vkCmdCopyMemoryIndirectNV vkCmdCopyMemoryIndirectNV;
-    PFN_vkCmdCopyMemoryToImageIndirectNV vkCmdCopyMemoryToImageIndirectNV;
-#endif //VK_NV_copy_memory_indirect
-#if defined(VK_NV_memory_decompression) 
-    PFN_vkCmdDecompressMemoryNV vkCmdDecompressMemoryNV;
-    PFN_vkCmdDecompressMemoryIndirectCountNV vkCmdDecompressMemoryIndirectCountNV;
-#endif //VK_NV_memory_decompression
 #if defined(VK_NV_device_generated_commands_compute) && VK_NV_DEVICE_GENERATED_COMMANDS_COMPUTE_SPEC_VERSION >= 2 
     PFN_vkGetPipelineIndirectMemoryRequirementsNV vkGetPipelineIndirectMemoryRequirementsNV;
     PFN_vkCmdUpdatePipelineIndirectBufferNV vkCmdUpdatePipelineIndirectBufferNV;
@@ -1230,12 +969,6 @@ struct DokDeviceTable {
     PFN_vkBindOpticalFlowSessionImageNV vkBindOpticalFlowSessionImageNV;
     PFN_vkCmdOpticalFlowExecuteNV vkCmdOpticalFlowExecuteNV;
 #endif //VK_NV_optical_flow
-#if defined(VK_KHR_maintenance5) 
-    PFN_vkCmdBindIndexBuffer2KHR vkCmdBindIndexBuffer2KHR;
-    PFN_vkGetRenderingAreaGranularityKHR vkGetRenderingAreaGranularityKHR;
-    PFN_vkGetDeviceImageSubresourceLayoutKHR vkGetDeviceImageSubresourceLayoutKHR;
-    PFN_vkGetImageSubresourceLayout2KHR vkGetImageSubresourceLayout2KHR;
-#endif //VK_KHR_maintenance5
 #if defined(VK_AMD_anti_lag) 
     PFN_vkAntiLagUpdateAMD vkAntiLagUpdateAMD;
 #endif //VK_AMD_anti_lag
@@ -1247,6 +980,8 @@ struct DokDeviceTable {
     PFN_vkDestroyShaderEXT vkDestroyShaderEXT;
     PFN_vkGetShaderBinaryDataEXT vkGetShaderBinaryDataEXT;
     PFN_vkCmdBindShadersEXT vkCmdBindShadersEXT;
+    PFN_vkCmdSetPatchControlPointsEXT vkCmdSetPatchControlPointsEXT;
+    PFN_vkCmdSetLogicOpEXT vkCmdSetLogicOpEXT;
 #endif //VK_EXT_shader_object
 #if (defined(VK_EXT_shader_object) && defined(VK_EXT_depth_clamp_control)) || (defined(VK_EXT_depth_clamp_control)) 
     PFN_vkCmdSetDepthClampRangeEXT vkCmdSetDepthClampRangeEXT;
@@ -1293,24 +1028,9 @@ struct DokDeviceTable {
 #if defined(VK_QNX_external_memory_screen_buffer) 
     PFN_vkGetScreenBufferPropertiesQNX vkGetScreenBufferPropertiesQNX;
 #endif //VK_QNX_external_memory_screen_buffer
-#if defined(VK_KHR_line_rasterization) 
-    PFN_vkCmdSetLineStippleKHR vkCmdSetLineStippleKHR;
-#endif //VK_KHR_line_rasterization
 #if defined(VK_KHR_calibrated_timestamps) 
     PFN_vkGetCalibratedTimestampsKHR vkGetCalibratedTimestampsKHR;
 #endif //VK_KHR_calibrated_timestamps
-#if defined(VK_KHR_maintenance6) 
-    PFN_vkCmdBindDescriptorSets2KHR vkCmdBindDescriptorSets2KHR;
-    PFN_vkCmdPushConstants2KHR vkCmdPushConstants2KHR;
-#endif //VK_KHR_maintenance6
-#if defined(VK_KHR_maintenance6) && defined(VK_KHR_push_descriptor) 
-    PFN_vkCmdPushDescriptorSet2KHR vkCmdPushDescriptorSet2KHR;
-    PFN_vkCmdPushDescriptorSetWithTemplate2KHR vkCmdPushDescriptorSetWithTemplate2KHR;
-#endif //VK_KHR_maintenance6+VK_KHR_push_descriptor
-#if defined(VK_KHR_maintenance6) && defined(VK_EXT_descriptor_buffer) 
-    PFN_vkCmdSetDescriptorBufferOffsets2EXT vkCmdSetDescriptorBufferOffsets2EXT;
-    PFN_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT vkCmdBindDescriptorBufferEmbeddedSamplers2EXT;
-#endif //VK_KHR_maintenance6+VK_EXT_descriptor_buffer
 #if defined(VK_QCOM_tile_memory_heap) 
     PFN_vkCmdBindTileMemoryQCOM vkCmdBindTileMemoryQCOM;
 #endif //VK_QCOM_tile_memory_heap
@@ -1362,9 +1082,6 @@ struct DokDeviceTable {
     PFN_vkGetShaderInstrumentationValuesARM vkGetShaderInstrumentationValuesARM;
     PFN_vkClearShaderInstrumentationMetricsARM vkClearShaderInstrumentationMetricsARM;
 #endif //VK_ARM_shader_instrumentation
-#if defined(VK_EXT_fragment_density_map_offset) 
-    PFN_vkCmdEndRendering2EXT vkCmdEndRendering2EXT;
-#endif //VK_EXT_fragment_density_map_offset
 #if defined(VK_EXT_custom_resolve) && (defined(VK_KHR_dynamic_rendering) || defined(VK_VERSION_1_3)) 
     PFN_vkCmdBeginCustomResolveEXT vkCmdBeginCustomResolveEXT;
 #endif //VK_EXT_custom_resolve+(VK_KHR_dynamic_rendering,VK_VERSION_1_3)

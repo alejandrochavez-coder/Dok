@@ -24,7 +24,7 @@ class CommandEntry:
     command: str
 
 @dataclass
-class ParseFile:
+class ParsePath:
     source: Path
     target: Path
 
@@ -81,7 +81,7 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
 
     for extension in registry.findall("extensions/extension"):
 
-        if api.value not in extension.get("supported").split(","):
+        if api.value not in extension.get("supported").split(",") or extension.get("promotedto", "") or extension.get("deprecatedby", ""):
             continue
 
         extension_name = extension.get("name")
@@ -103,32 +103,30 @@ def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list
 
     return entries
 
-def get_command_type(type: str, type_parents: dict[str, str | None]) -> CommandType:
-    while type:
-        if type == "VkInstance":
-            return CommandType.Instance
-        
-        if type == "VkDevice":
-            return CommandType.Device
-        
-        type = type_parents.get(type)
-
-    return CommandType.Global
-
 def parse_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
     command_types: dict[str, CommandType] = {}
-    type_parents: dict[str, str | None] = {}
+    type_handles: dict[str, CommandType] = {}
+    type_parents: dict[str, str] = {}
 
     for type in registry.findall("types/type"):
-        if type.get("category") == "handle" and (command_name := type.findtext("name")):
-            type_parents[command_name] = type.get("parent")
+        if type.get("category") == "handle" and (type_name := type.findtext("name")):
+            type_parents[type_name] = type.get("parent", type_name)
+
+    for type_name in type_parents.keys(): 
+
+        command_type = None
+        handle_name = type_name
+
+        while command_type is None:
+
+            if handle_name == "VkInstance": command_type = CommandType.Instance
+            if handle_name == "VkDevice": command_type = CommandType.Device
+            handle_name = type_parents[handle_name]
+
+        type_handles[type_name] = command_type
 
     for command in registry.find("commands"):
-        alias = command.get("alias")
-        if alias:
-            command_types[command.get("name")] = command_types[alias]
-            continue
-
+        
         command_name = command.findtext("proto/name")
         if command_name == "vkGetInstanceProcAddr":
             command_types[command_name] = CommandType.Global
@@ -138,10 +136,8 @@ def parse_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
             command_types[command_name] = CommandType.Instance
             continue
 
-        type = command.findtext("param[1]/type")
-        command_type = get_command_type(type, type_parents)
-
-        command_types[command_name] = command_type
+        type_name = command.findtext("param[1]/type")
+        command_types[command_name] = type_handles.get(type_name, CommandType.Global)
 
     return command_types
 
@@ -170,7 +166,10 @@ def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> dict[Co
 
     for entry in parse_command_entries(registry, api):
 
-        command_type = command_types[entry.command]
+        command_type = command_types.get(entry.command)
+        if command_type is None:
+            continue
+
         type_feature_entries.setdefault(command_type, {}).setdefault(entry.requirement, []).append(entry.command)
 
     entries: dict[CommandType, list[Feature]] = {}
@@ -193,27 +192,17 @@ def parse_requirement(requirement: str) -> str:
     buffer = ""
     parsed = ""
 
-    for index, char in enumerate(requirement):
-
-        last = index == len(requirement) - 1
-        enum = "=" in buffer
-        symbol = char in "()+,"
-
-        if not symbol:
+    for char in requirement:
+        if char not in "()+,":
             buffer += char
+            continue
 
-        if (buffer and symbol or last and not symbol) and not enum:
-            parsed += f"defined({buffer})"
+        parsed += buffer if not buffer or "=" in buffer else f"defined({buffer})"
 
-        if (buffer and symbol or last and not symbol) and enum:
-            parsed += buffer
+        buffer = ""
+        parsed += char
 
-        if buffer and symbol:
-            buffer = ""
-
-        if symbol:
-            parsed += char
-
+    parsed += buffer if not buffer or "=" in buffer else f"defined({buffer})"
     return parsed.replace("+", " && ").replace(",", " || ")
 
 def patch_file_line(line: str, entries: dict[CommandType, list[Feature]]) -> str:
@@ -246,7 +235,7 @@ def patch_file_line(line: str, entries: dict[CommandType, list[Feature]]) -> str
 
     return patched
 
-def start(entries: dict[CommandType, list[Feature]], parse_file: ParseFile):
+def parse_file(entries: dict[CommandType, list[Feature]], parse_file: ParsePath):
 
     patched_data = ""
 
@@ -262,10 +251,10 @@ directory = Path(__file__).parent
 registry = get_registry()
 entries = parse_handle_entries(registry, VulkanApi.VULKAN)
 
-parse_files = [
-    ParseFile(directory / "dok_unparched.c", directory / "dok.c"),
-    ParseFile(directory / "dok_unparched.h", directory / "dok.h")
+parse_paths = [
+    ParsePath(directory / "dok_unparched.c", directory / "dok.c"),
+    ParsePath(directory / "dok_unparched.h", directory / "dok.h")
 ]
 
-for parse_file in parse_files:
-    start(entries, parse_file)
+for parse_path in parse_paths:
+    parse_file(entries, parse_path)
