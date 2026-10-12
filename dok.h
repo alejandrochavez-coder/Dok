@@ -1105,11 +1105,3 @@ struct DokDeviceTable {
 #ifdef __cplusplus
 }
 #endif
-
-
-
-
-
-
-
-

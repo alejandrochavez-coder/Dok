@@ -1114,5 +1114,3 @@ void dokLoadDeviceTable(VkDevice device, DokInstanceTable* pFunctions, DokDevice
 #endif // defined(VK_EXT_primitive_restart_index) 
 #pragma endregion
 }
-
-

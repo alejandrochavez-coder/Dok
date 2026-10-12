@@ -19,11 +19,6 @@ class CommandEntry:
     requirement: str
     command: str
 
-@dataclass
-class ParsePath:
-    source: Path
-    target: Path
-
 VULKAN_URL = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml"
 
 def get_registry() -> etree.ElementTree:
@@ -186,53 +181,47 @@ def parse_requirement(requirement: str) -> str:
     parsed += f"defined({buffer})" if buffer and "=" not in buffer else buffer
     return parsed.replace("+", " && ").replace(",", " || ")
 
+def line_command_type(line: str) -> CommandType:
+
+    for command_type in CommandType:
+        if command_type.value in line:
+            return command_type
+
+    return None
+
 def parse_file(entries: dict[CommandType, list[Feature]], file_path: Path):
 
-    patched_data: list[str] = []
-    unpatched_data= ""
+    unpatched_data: list[str] = []
+    patched_data = ""
 
     with open(file_path, "r") as file:
 
-        add_line = True
+        outside_region = True
 
         for line in file:
 
-            region_line = line.lstrip().startswith("#pragma region ")
             region_ends = line.lstrip().startswith("#pragma endregion")
+            region_starts = line.lstrip().startswith("#pragma region ")
+            valid_region = region_starts and line_command_type(line) is not None
 
-            add_line = False if region_line else add_line
-            add_line = True if region_ends else add_line
+            outside_region = False if valid_region else outside_region
+            outside_region = True if region_ends else outside_region
 
-            unpatched_data += line if add_line or region_line else ""
+            if outside_region or region_starts: unpatched_data.append(line)
 
-    for line in unpatched_data.split("\n"):
+    for line in unpatched_data:
 
-        region_line = line.startswith("#pragma region")
-        patched_data.append(line)
-        # patched_data += line + "\n"
+        command_type = line_command_type(line)
+        patched_data += line
 
-        if not region_line:
+        if not line.startswith("#pragma region") or command_type is None: 
             continue
 
-        index = 0
-        for command_type in CommandType:
-
-            if command_type.value in line: break
-            index += 1
-
-        if index == len(CommandType):
-            continue
-
-
-        command_type = list(CommandType)[index]
-        identifier = line.replace("#pragma region", "", 1) + "\n"
+        identifier = line.replace("#pragma region", "", 1).rstrip() + "\n"
 
         for feature in entries[command_type]:
-            patched_data.append(f"#if {parse_requirement(feature.requirement)}")
-            # patched_data += f"#if {parse_requirement(feature.requirement)} \n"
+            patched_data += f"#if {parse_requirement(feature.requirement)} \n"
             patched_data += "".join([identifier.replace(command_type.value, command) for command in feature.commands])
-            patched_data.append("".join([identifier.replace(command_type.value, command) for command in feature.commands]))
-
             patched_data += f"#endif // {parse_requirement(feature.requirement)} \n"
 
     with open(file_path, "w") as file:
