@@ -4,10 +4,6 @@ from pathlib import Path
 from enum import Enum
 import urllib.request
 
-class VulkanApi(Enum):
-    VULKAN = "vulkan"
-    VULKAN_SC = "vulkansc"
-
 class CommandType(Enum):
     Global = "{Global}"
     Instance = "{Instance}"
@@ -45,56 +41,47 @@ def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> 
 
     return entries
 
-def parse_feature_entries(registry: etree.ElementTree, api: VulkanApi) -> list[CommandEntry]:
+def parse_feature_entries(registry: etree.ElementTree) -> list[CommandEntry]:
     entries: list[CommandEntry] = []
 
     for feature in registry.findall("feature"):
 
-        if api.value not in feature.get("api").split(","):
+        if "vulkan" not in feature.get("api").split(","):
             continue
 
         feature_name = feature.get("name")
-
-        requirement = feature_name.replace("BASE_", "").replace("COMPUTE_", "").replace("GRAPHICS_", "")
+        requirement = feature_name.replace("_BASE", "").replace("_COMPUTE", "").replace("_GRAPHICS", "")
 
         commands = feature.findall("require/command")
         entries.extend(parse_tree_entries(commands, requirement))
 
     return entries
 
-def parse_spec_dependency(require: etree.Element[str], author: str) -> str:
-
-    spec = require.find("enum")
-    if author == "KHR" or spec is None:
+def parse_spec_version(require: etree.Element[str], author: str) -> str:
+    spec = require.find("enum", "")
+    if spec is None or author == "KHR" or not (spec_version := spec.get("value")) or int(spec_version) <= 1:
         return ""   
 
-    spec_version = spec.get("value", "")
     spec_name = spec.get("name", "")
+    return f"+{spec_name} >= {spec_version}"
 
-    if spec_name and spec_version and int(spec_version) > 1:
-        return f"{spec_name} >= {spec_version}"
-
-    return ""
-
-def parse_extension_entries(registry: etree.ElementTree, api: VulkanApi) -> list[CommandEntry]:
+def parse_extension_entries(registry: etree.ElementTree) -> list[CommandEntry]:
     entries: list[CommandEntry] = []
 
     for extension in registry.findall("extensions/extension"):
 
-        if api.value not in extension.get("supported").split(",") or extension.get("promotedto", "") or extension.get("deprecatedby", ""):
+        if "vulkan" not in extension.get("supported").split(",") or extension.get("promotedto", "") or extension.get("deprecatedby", ""):
             continue
 
         extension_name = extension.get("name")
-        extension_author = extension.get("author")
+        author = extension.get("author")
 
         for require in extension.findall("require"):
 
             dependencies = require.get("depends", "")
             dependencies = f"({dependencies})" if "," in dependencies else dependencies
             dependencies = f"+{dependencies}" if dependencies else dependencies
-
-            spec_version = parse_spec_dependency(require, extension_author)
-            spec_version = f"+{spec_version}" if spec_version else spec_version
+            spec_version = parse_spec_version(require, author)
 
             requirement = extension_name + dependencies + spec_version
 
@@ -141,36 +128,31 @@ def parse_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
 
     return command_types
 
-def parse_command_entries(registry: etree.ElementTree, api: VulkanApi):
-
-    entries: list[CommandEntry] = []
+def parse_command_entries(registry: etree.ElementTree):
 
     command_requirements: dict[str, list[str]] = {}
+    entries: list[CommandEntry] = []
 
-    for entry in parse_feature_entries(registry, api) + parse_extension_entries(registry, api):
+    for entry in parse_feature_entries(registry) + parse_extension_entries(registry):
         command_requirements.setdefault(entry.command, []).append(entry.requirement)
 
     for command, requirements in command_requirements.items():
-        if len(requirements) == 1:
-            entries.append(CommandEntry(requirements[0], command))
-            continue
 
-        requirement = ",".join(f"({requirement})" for requirement in requirements)
-        entries.append(CommandEntry(requirement, command))
+        unique_requirement = len(requirements) == 1
+        requirement = requirements[0] if unique_requirement else ",".join(f"({requirement})" for requirement in requirements)
+
+        entry = CommandEntry(requirement, command)
+        entries.append(entry)
 
     return entries
 
-def parse_handle_entries(registry: etree.ElementTree, api: VulkanApi) -> dict[CommandType, list[Feature]]:
+def parse_handle_entries(registry: etree.ElementTree) -> dict[CommandType, list[Feature]]:
     type_feature_entries: dict[CommandType, dict[str, list[str]]] = {}
     command_types = parse_command_types(registry)
 
-    for entry in parse_command_entries(registry, api):
-
-        command_type = command_types.get(entry.command)
-        if command_type is None:
-            continue
-
-        type_feature_entries.setdefault(command_type, {}).setdefault(entry.requirement, []).append(entry.command)
+    for entry in parse_command_entries(registry):
+        if (command_type := command_types.get(entry.command, "")):
+            type_feature_entries.setdefault(command_type, {}).setdefault(entry.requirement, []).append(entry.command)
 
     entries: dict[CommandType, list[Feature]] = {}
 
@@ -197,64 +179,73 @@ def parse_requirement(requirement: str) -> str:
             buffer += char
             continue
 
-        parsed += buffer if not buffer or "=" in buffer else f"defined({buffer})"
-
-        buffer = ""
+        parsed += f"defined({buffer})" if buffer and "=" not in buffer else buffer
         parsed += char
+        buffer = ""
 
-    parsed += buffer if not buffer or "=" in buffer else f"defined({buffer})"
+    parsed += f"defined({buffer})" if buffer and "=" not in buffer else buffer
     return parsed.replace("+", " && ").replace(",", " || ")
 
-def patch_file_line(line: str, entries: dict[CommandType, list[Feature]]) -> str:
+def parse_file(entries: dict[CommandType, list[Feature]], file_path: Path):
 
-    if not line.lstrip().startswith("//"):
-        return line
+    patched_data: list[str] = []
+    unpatched_data= ""
 
-    found_command_type = None
+    with open(file_path, "r") as file:
 
-    for command_type in CommandType:
+        add_line = True
 
-        if command_type.value in line:
+        for line in file:
 
-            found_command_type = command_type
-            break
+            region_line = line.lstrip().startswith("#pragma region ")
+            region_ends = line.lstrip().startswith("#pragma endregion")
 
-    if found_command_type is None:
-        return line
+            add_line = False if region_line else add_line
+            add_line = True if region_ends else add_line
 
-    line = line.replace("//", "  ", 1).rstrip() + "\n"
-    patched = ""
+            unpatched_data += line if add_line or region_line else ""
 
-    for feature in entries[found_command_type]:
-        patched += f"#if {parse_requirement(feature.requirement)} \n"
+    for line in unpatched_data.split("\n"):
 
-        for command in feature.commands:
-            patched += line.replace(command_type.value, command)
+        region_line = line.startswith("#pragma region")
+        patched_data.append(line)
+        # patched_data += line + "\n"
 
-        patched += f"#endif //{feature.requirement}\n"
+        if not region_line:
+            continue
 
-    return patched
+        index = 0
+        for command_type in CommandType:
 
-def parse_file(entries: dict[CommandType, list[Feature]], parse_file: ParsePath):
+            if command_type.value in line: break
+            index += 1
 
-    patched_data = ""
+        if index == len(CommandType):
+            continue
 
-    with open(parse_file.source, "r") as file:
 
-        for line in file.readlines():
-            patched_data += patch_file_line(line, entries)
+        command_type = list(CommandType)[index]
+        identifier = line.replace("#pragma region", "", 1) + "\n"
 
-    with open(parse_file.target, "w") as file:
+        for feature in entries[command_type]:
+            patched_data.append(f"#if {parse_requirement(feature.requirement)}")
+            # patched_data += f"#if {parse_requirement(feature.requirement)} \n"
+            patched_data += "".join([identifier.replace(command_type.value, command) for command in feature.commands])
+            patched_data.append("".join([identifier.replace(command_type.value, command) for command in feature.commands]))
+
+            patched_data += f"#endif // {parse_requirement(feature.requirement)} \n"
+
+    with open(file_path, "w") as file:
         file.write(patched_data)
         
 directory = Path(__file__).parent
 registry = get_registry()
-entries = parse_handle_entries(registry, VulkanApi.VULKAN)
+entries = parse_handle_entries(registry)
 
-parse_paths = [
-    ParsePath(directory / "dok_unparched.c", directory / "dok.c"),
-    ParsePath(directory / "dok_unparched.h", directory / "dok.h")
+file_paths = [
+    directory / "dok.c",
+    directory / "dok.h"
 ]
 
-for parse_path in parse_paths:
-    parse_file(entries, parse_path)
+for file_path in file_paths:
+    parse_file(entries, file_path)
