@@ -157,7 +157,7 @@ def parse_handle_entries(registry: etree.ElementTree) -> dict[CommandType, list[
 
         for requirement, commands in feature_entries.items():
 
-            feature = Feature(requirement, commands)
+            feature = Feature(parse_requirement(requirement), commands)
             features.append(feature)
 
         entries[type] = features
@@ -182,16 +182,27 @@ def parse_requirement(requirement: str) -> str:
     return parsed.replace("+", " && ").replace(",", " || ")
 
 def line_command_type(line: str) -> CommandType:
-
     for command_type in CommandType:
         if command_type.value in line:
             return command_type
 
     return None
 
+def pepesillo(line: str, command_type: CommandType, features: list[Feature]) -> str:
+    parsed = ""
+
+    for feature in features:
+
+        parsed += f"#if {feature.requirement} \n"
+        for command in feature.commands:
+            parsed += line.replace(command_type.value, command)
+
+        parsed += f"#endif //{feature.requirement} \n"
+
+    return parsed
+
 def parse_file(entries: dict[CommandType, list[Feature]], file_path: Path):
 
-    unpatched_data: list[str] = []
     patched_data = ""
 
     with open(file_path, "r") as file:
@@ -200,29 +211,19 @@ def parse_file(entries: dict[CommandType, list[Feature]], file_path: Path):
 
         for line in file:
 
+            command_type = line_command_type(line)
+            region_starts = line.lstrip().startswith("#pragma region ") and command_type
             region_ends = line.lstrip().startswith("#pragma endregion")
-            region_starts = line.lstrip().startswith("#pragma region ")
-            valid_region = region_starts and line_command_type(line) is not None
 
-            outside_region = False if valid_region else outside_region
-            outside_region = True if region_ends else outside_region
+            # outside_region = False if region_starts else outside_region
+            outside_region = outside_region and not region_starts
+            outside_region = outside_region or region_ends
 
-            if outside_region or region_starts: unpatched_data.append(line)
+            identifier = line.replace("#pragma region", "", 1).rstrip() + "\n"
+            features = entries.get(command_type)
 
-    for line in unpatched_data:
-
-        command_type = line_command_type(line)
-        patched_data += line
-
-        if not line.startswith("#pragma region") or command_type is None: 
-            continue
-
-        identifier = line.replace("#pragma region", "", 1).rstrip() + "\n"
-
-        for feature in entries[command_type]:
-            patched_data += f"#if {parse_requirement(feature.requirement)} \n"
-            patched_data += "".join([identifier.replace(command_type.value, command) for command in feature.commands])
-            patched_data += f"#endif // {parse_requirement(feature.requirement)} \n"
+            if outside_region or region_starts: patched_data += line
+            if region_starts: patched_data += pepesillo(identifier, command_type, features)
 
     with open(file_path, "w") as file:
         file.write(patched_data)
