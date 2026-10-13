@@ -35,6 +35,14 @@ def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> 
 
     return entries
 
+def parse_spec_version(require: etree.Element[str], author: str) -> str:
+    spec = require.find("enum", "")
+    if spec is None or author == "KHR" or not (spec_version := spec.get("value")) or int(spec_version) <= 1:
+        return ""   
+
+    spec_name = spec.get("name", "")
+    return f"+{spec_name} >= {spec_version}"
+
 def parse_feature_entries(registry: etree.ElementTree) -> list[CommandEntry]:
     entries: list[CommandEntry] = []
 
@@ -50,14 +58,6 @@ def parse_feature_entries(registry: etree.ElementTree) -> list[CommandEntry]:
         entries.extend(parse_tree_entries(commands, requirement))
 
     return entries
-
-def parse_spec_version(require: etree.Element[str], author: str) -> str:
-    spec = require.find("enum", "")
-    if spec is None or author == "KHR" or not (spec_version := spec.get("value")) or int(spec_version) <= 1:
-        return ""   
-
-    spec_name = spec.get("name", "")
-    return f"+{spec_name} >= {spec_version}"
 
 def parse_extension_entries(registry: etree.ElementTree) -> list[CommandEntry]:
     entries: list[CommandEntry] = []
@@ -75,12 +75,27 @@ def parse_extension_entries(registry: etree.ElementTree) -> list[CommandEntry]:
             dependencies = require.get("depends", "")
             dependencies = f"({dependencies})" if "," in dependencies else dependencies
             dependencies = f"+{dependencies}" if dependencies else dependencies
-            spec_version = parse_spec_version(require, author)
-
-            requirement = extension_name + dependencies + spec_version
+            requirement = extension_name + dependencies + parse_spec_version(require, author)
 
             commands = require.findall("command")
             entries.extend(parse_tree_entries(commands, requirement))
+
+    return entries
+
+def parse_command_entries(registry: etree.ElementTree) -> list[CommandEntry]:
+    command_requirements: dict[str, list[str]] = {}
+    entries: list[CommandEntry] = []
+
+    for entry in parse_feature_entries(registry) + parse_extension_entries(registry):
+        command_requirements.setdefault(entry.command, []).append(entry.requirement)
+
+    for command, requirements in command_requirements.items():
+
+        unique_requirement = len(requirements) == 1
+        requirement = requirements[0] if unique_requirement else ",".join(f"({requirement})" for requirement in requirements)
+
+        entry = CommandEntry(requirement, command)
+        entries.append(entry)
 
     return entries
 
@@ -95,8 +110,8 @@ def parse_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
 
     for type_name in type_parents.keys(): 
 
-        command_type = None
         handle_name = type_name
+        command_type = None
 
         while command_type is None:
 
@@ -121,23 +136,6 @@ def parse_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
         command_types[command_name] = type_handles.get(type_name, CommandType.Global)
 
     return command_types
-
-def parse_command_entries(registry: etree.ElementTree) -> list[CommandEntry]:
-    command_requirements: dict[str, list[str]] = {}
-    entries: list[CommandEntry] = []
-
-    for entry in parse_feature_entries(registry) + parse_extension_entries(registry):
-        command_requirements.setdefault(entry.command, []).append(entry.requirement)
-
-    for command, requirements in command_requirements.items():
-
-        unique_requirement = len(requirements) == 1
-        requirement = requirements[0] if unique_requirement else ",".join(f"({requirement})" for requirement in requirements)
-
-        entry = CommandEntry(requirement, command)
-        entries.append(entry)
-
-    return entries
 
 def parse_handle_entries(registry: etree.ElementTree) -> dict[CommandType, list[Feature]]:
     type_feature_entries: dict[CommandType, dict[str, list[str]]] = {}
