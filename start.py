@@ -26,7 +26,6 @@ def get_registry() -> etree.ElementTree:
         return etree.parse(file)
 
 def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> list[CommandEntry]:
-
     entries: list[CommandEntry] = []
 
     for command in commands:
@@ -65,7 +64,7 @@ def parse_extension_entries(registry: etree.ElementTree) -> list[CommandEntry]:
 
     for extension in registry.findall("extensions/extension"):
 
-        if "vulkan" not in extension.get("supported").split(",") or extension.get("promotedto", "") or extension.get("deprecatedby", ""):
+        if "vulkan" not in extension.get("supported").split(",") or extension.get("promotedto") or extension.get("deprecatedby"):
             continue
 
         extension_name = extension.get("name")
@@ -123,8 +122,7 @@ def parse_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
 
     return command_types
 
-def parse_command_entries(registry: etree.ElementTree):
-
+def parse_command_entries(registry: etree.ElementTree) -> list[CommandEntry]:
     command_requirements: dict[str, list[str]] = {}
     entries: list[CommandEntry] = []
 
@@ -146,7 +144,7 @@ def parse_handle_entries(registry: etree.ElementTree) -> dict[CommandType, list[
     command_types = parse_command_types(registry)
 
     for entry in parse_command_entries(registry):
-        if (command_type := command_types.get(entry.command, "")):
+        if (command_type := command_types.get(entry.command)):
             type_feature_entries.setdefault(command_type, {}).setdefault(entry.requirement, []).append(entry.command)
 
     entries: dict[CommandType, list[Feature]] = {}
@@ -165,18 +163,16 @@ def parse_handle_entries(registry: etree.ElementTree) -> dict[CommandType, list[
     return entries
 
 def parse_requirement(requirement: str) -> str:
-
     buffer = ""
     parsed = ""
 
     for char in requirement:
-        if char not in "()+,":
+        if char in "()+,":
+            parsed += f"defined({buffer})" if buffer and "=" not in buffer else buffer
+            parsed += char
+            buffer = ""
+        else:
             buffer += char
-            continue
-
-        parsed += f"defined({buffer})" if buffer and "=" not in buffer else buffer
-        parsed += char
-        buffer = ""
 
     parsed += f"defined({buffer})" if buffer and "=" not in buffer else buffer
     return parsed.replace("+", " && ").replace(",", " || ")
@@ -188,7 +184,7 @@ def line_command_type(line: str) -> CommandType:
 
     return None
 
-def pepesillo(line: str, command_type: CommandType, features: list[Feature]) -> str:
+def build_features(line: str, command_type: CommandType, features: list[Feature]) -> str:
     parsed = ""
 
     for feature in features:
@@ -202,7 +198,6 @@ def pepesillo(line: str, command_type: CommandType, features: list[Feature]) -> 
     return parsed
 
 def parse_file(entries: dict[CommandType, list[Feature]], file_path: Path):
-
     patched_data = ""
 
     with open(file_path, "r") as file:
@@ -215,15 +210,14 @@ def parse_file(entries: dict[CommandType, list[Feature]], file_path: Path):
             region_starts = line.lstrip().startswith("#pragma region ") and command_type
             region_ends = line.lstrip().startswith("#pragma endregion")
 
-            # outside_region = False if region_starts else outside_region
-            outside_region = outside_region and not region_starts
-            outside_region = outside_region or region_ends
+            outside_region = False if region_starts else outside_region
+            outside_region = True if region_ends else outside_region
 
             identifier = line.replace("#pragma region", "", 1).rstrip() + "\n"
             features = entries.get(command_type)
 
             if outside_region or region_starts: patched_data += line
-            if region_starts: patched_data += pepesillo(identifier, command_type, features)
+            if region_starts: patched_data += build_features(identifier, command_type, features)
 
     with open(file_path, "w") as file:
         file.write(patched_data)
