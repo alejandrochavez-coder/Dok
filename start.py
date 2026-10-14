@@ -25,16 +25,6 @@ def get_registry() -> etree.ElementTree:
     with urllib.request.urlopen(VULKAN_URL) as file:
         return etree.parse(file)
 
-def parse_tree_entries(commands: list[etree.Element[str]], requirement: str) -> list[CommandEntry]:
-    entries: list[CommandEntry] = []
-
-    for command in commands:
-
-        command_name = command.get("name")
-        entries.append(CommandEntry(requirement, command_name))
-
-    return entries
-
 def parse_spec_version(require: etree.Element[str], author: str) -> str:
     spec = require.find("enum", "")
     if spec is None or author == "KHR" or not (spec_version := spec.get("value")) or int(spec_version) <= 1:
@@ -55,7 +45,7 @@ def parse_feature_entries(registry: etree.ElementTree) -> list[CommandEntry]:
         requirement = feature_name.replace("_BASE", "").replace("_COMPUTE", "").replace("_GRAPHICS", "")
 
         commands = feature.findall("require/command")
-        entries.extend(parse_tree_entries(commands, requirement))
+        entries += [CommandEntry(requirement, command.get("name")) for command in commands]
 
     return entries
 
@@ -78,7 +68,7 @@ def parse_extension_entries(registry: etree.ElementTree) -> list[CommandEntry]:
             requirement = extension_name + dependencies + parse_spec_version(require, author)
 
             commands = require.findall("command")
-            entries.extend(parse_tree_entries(commands, requirement))
+            entries += [CommandEntry(requirement, command.get("name")) for command in commands]
 
     return entries
 
@@ -175,13 +165,6 @@ def parse_requirement(requirement: str) -> str:
     parsed += f"defined({buffer})" if buffer and "=" not in buffer else buffer
     return parsed.replace("+", " && ").replace(",", " || ")
 
-def line_command_type(line: str) -> CommandType:
-    for command_type in CommandType:
-        if command_type.value in line:
-            return command_type
-
-    return None
-
 def build_features(line: str, command_type: CommandType, features: list[Feature]) -> str:
     parsed = ""
 
@@ -203,8 +186,9 @@ def parse_file(entries: dict[CommandType, list[Feature]], file_path: Path):
         outside_region = True
 
         for line in file:
+            command_types = [x for x in CommandType if x.value in line]
+            command_type = command_types[0] if command_types else None
 
-            command_type = line_command_type(line)
             region_starts = line.lstrip().startswith("#pragma region ") and command_type
             region_ends = line.lstrip().startswith("#pragma endregion")
 
