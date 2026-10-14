@@ -5,15 +5,21 @@ project (dok
 	LANGUAGES C
 )
 
-add_library (dok STATIC dok.c dok.h)
+add_library (dok STATIC
+	"include/dok/dok_vulkan_tables.h"
+	"include/dok/dok.h"
+	"include/dok/dok_window.h"
+)
 add_library (dok::dok ALIAS dok)
 
 target_include_directories(dok PUBLIC
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
-if (NOT WIN32)
+if (WIN32)
+	target_sources(dok PRIVATE src/dok_window_win32.c)
+else()
 	target_link_libraries(dok PUBLIC ${CMAKE_DL_LIBS})
 endif()
 

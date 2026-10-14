@@ -208,10 +208,4 @@ directory = Path(__file__).parent
 registry = get_registry()
 entries = parse_handle_entries(registry)
 
-file_paths = [
-    directory / "dok.c",
-    directory / "dok.h"
-]
-
-for file_path in file_paths:
-    parse_file(entries, file_path)
+parse_file(directory / "dok_vulkan_tables.h")
