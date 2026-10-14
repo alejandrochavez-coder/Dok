@@ -2,15 +2,24 @@
 include(FetchContent)
 
 project (dok
-	LANGUAGES C
+LANGUAGES C
 )
 
+include(CTest)
 add_library (dok STATIC
 	"include/dok/dok_vulkan_tables.h"
 	"include/dok/dok.h"
 	"include/dok/dok_window.h"
 )
 add_library (dok::dok ALIAS dok)
+
+if (BUILD_TESTING)
+
+	add_subdirectory(test)
+	add_test(NAME DokTest COMMAND dok_test)
+
+endif()
+
 
 target_include_directories(dok PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
