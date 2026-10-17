@@ -1,5 +1,7 @@
 #include <dok/dok_window.h>
 #include <windows.h>
+#include <stdbool.h>
+#include <stdio.h>
 
 struct DokWindow_T {
     HWND handle;
@@ -22,7 +24,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         window->exists = false;
 
     }
-
 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
@@ -57,14 +58,24 @@ void dokCreateWindow(const char* title, int height, int width, DokWindow* pOut) 
     window->handle = window_handle;
     window->exists = true;
     
+    SetProp(window_handle, PROP_KEY, window);
     ShowWindow(window_handle, SW_SHOW);
-    SetProp(window_handle, PROP_KEY, &window);
 
     *pOut = window;
 }
 
 bool dokWindowExists(DokWindow window) {
     return window->exists;
+}
+
+void dokFreeWindow(DokWindow window) {
+    if (window->handle) {
+        RemovePropW(window->handle, L"Dok");
+        DestroyWindow(window->handle);
+        window->handle = NULL;
+    }
+
+    free(window);
 }
 
 void dokPollWindow(DokWindow window) {
