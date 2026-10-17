@@ -10,6 +10,7 @@ add_library (dok STATIC
 	"include/dok/dok_vulkan_tables.h"
 	"include/dok/dok.h"
 	"include/dok/dok_window.h"
+	include/dok/dok_vulkan_loader.h
 )
 add_library (dok::dok ALIAS dok)
 
@@ -27,7 +28,8 @@ target_include_directories(dok PUBLIC
 )
 
 if (WIN32)
-	target_sources(dok PRIVATE src/dok_window_win32.c)
+	target_sources(dok PRIVATE src/dok_window_win32.c
+	    src/dok_vulkan_loader_win32.c)
 else()
 	target_link_libraries(dok PUBLIC ${CMAKE_DL_LIBS})
 endif()
