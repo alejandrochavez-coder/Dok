@@ -1,3 +1,4 @@
+#define VK_USE_PLATFORM_WIN32_KHR
 #include <dok/dok_window.h>
 #include <windows.h>
 #include <stdbool.h>
@@ -5,6 +6,7 @@
 
 struct DokWindow_T {
     HWND handle;
+    HINSTANCE hInstance;
     bool exists;
 };
 
@@ -30,14 +32,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 void dokCreateWindow(const char* title, int height, int width, DokWindow* pOut) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    WNDCLASS window_class = {0};    
+    WNDCLASS window_class = {0};
 
     if (!GetClassInfo(hInstance, CLASS_NAME, &window_class)) {
         window_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+        window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
+        window_class.lpszClassName = CLASS_NAME;
         window_class.lpfnWndProc = WindowProc;
         window_class.hInstance = hInstance;
-        window_class.lpszClassName = CLASS_NAME;
-        window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
 
         RegisterClass(&window_class);
     }
@@ -50,11 +52,12 @@ void dokCreateWindow(const char* title, int height, int width, DokWindow* pOut) 
         CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
         NULL,
         NULL,
-        window_class.hInstance,
+        hInstance,
         NULL
     );
 
     DokWindow window = (DokWindow) malloc(sizeof(struct DokWindow_T));
+    window->hInstance = hInstance;
     window->handle = window_handle;
     window->exists = true;
     
@@ -62,6 +65,37 @@ void dokCreateWindow(const char* title, int height, int width, DokWindow* pOut) 
     ShowWindow(window_handle, SW_SHOW);
 
     *pOut = window;
+}
+
+const char* dokGetPlatformSurfaceExtension() {
+    return VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+}
+
+VkBool32 dokGetPhysicalDevicePresentationSupport(DokInstanceTable* instanceTable, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) {
+    PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR presentationSupport = (PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR)
+        instanceTable->vkGetInstanceProcAddr(instanceTable->instance, "vkGetPhysicalDeviceWin32PresentationSupportKHR");
+
+    if (!presentationSupport) {
+        return VK_FALSE;
+    }
+
+    return presentationSupport(physicalDevice, queueFamilyIndex);
+}
+
+VkResult dokCreateWindowSurface(DokInstanceTable* instanceTable, DokWindow window, VkSurfaceKHR* pSurface) {
+    VkWin32SurfaceCreateInfoKHR info = { 0 };
+    info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+    info.hinstance = window->hInstance;
+    info.hwnd = window->handle;
+
+    PFN_vkCreateWin32SurfaceKHR createSurface = (PFN_vkCreateWin32SurfaceKHR) 
+        instanceTable->vkGetInstanceProcAddr(instanceTable->instance, "vkCreateWin32SurfaceKHR");
+
+    if (!createSurface) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return createSurface(instanceTable->instance, &info, NULL, pSurface);
 }
 
 bool dokWindowExists(DokWindow window) {

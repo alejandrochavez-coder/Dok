@@ -22,6 +22,8 @@ typedef struct DokGlobalTable {
 } DokGlobalTable;
 
 typedef struct DokInstanceTable {
+    VkInstance instance;
+    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
 #pragma region    PFN_{Instance} {Instance};
 #if defined(VK_VERSION_1_0) 
     PFN_vkDestroyInstance vkDestroyInstance;
@@ -1104,6 +1106,8 @@ void dokLoadGlobalTable(PFN_vkGetInstanceProcAddr instanceProcAddr, DokGlobalTab
 }
 
 void dokLoadInstanceTable(PFN_vkGetInstanceProcAddr instanceProcAddr, VkInstance instance, DokInstanceTable* pOut) {
+    pOut->instance = instance;
+    pOut->vkGetInstanceProcAddr = instanceProcAddr;
 #pragma region    pOut->{Instance} = (PFN_{Instance})instanceProcAddr(instance, "{Instance}");
 #if defined(VK_VERSION_1_0) 
     pOut->vkDestroyInstance = (PFN_vkDestroyInstance)instanceProcAddr(instance, "vkDestroyInstance");

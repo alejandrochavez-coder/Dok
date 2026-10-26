@@ -5,33 +5,35 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-VkResult dok_get_device_queue_family(
+VkBool32 dokGetDeviceQueueFamily(
     DokInstanceTable*   instanceTable,
-    VkPhysicalDevice    device,
+    VkPhysicalDevice    physicalDevice,
     uint32_t            requirements,
     uint32_t*           pOut) {
 
     uint32_t queueFamilyCount = 0;
-    instanceTable->vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
+    instanceTable->vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
 
     VkQueueFamilyProperties* queueFamilies = (VkQueueFamilyProperties*) malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
-    instanceTable->vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
+    instanceTable->vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
 
     for (size_t i = 0; i < queueFamilyCount; i++) {
+        if (dokGetPhysicalDevicePresentationSupport(instanceTable, physicalDevice, i) == VK_FALSE) {
+            continue;
+        }
+
         if (queueFamilies[i].queueFlags & requirements) {
             *pOut = i;
-            return VK_SUCCESS;
+            return VK_TRUE;
         }
     }
 
-    return VK_ERROR_INITIALIZATION_FAILED;
+    return VK_FALSE;
 }
 
 int main() {
-    DokVkLoader loader = dokLoadVulkan();
-    if (!loader) {
-        return 1;
-    }
+    DokVkLoader loader;
+    dokLoadVulkan(&loader);
 
     PFN_vkGetInstanceProcAddr instanceProcAddr = (PFN_vkGetInstanceProcAddr) dokGetFunction(loader, "vkGetInstanceProcAddr");
 
@@ -43,30 +45,37 @@ int main() {
     appInfo.pApplicationName = "Dok";
     appInfo.apiVersion = VK_API_VERSION_1_3;
 
+    const char* instanceExtensions[] = { VK_KHR_SURFACE_EXTENSION_NAME, dokGetPlatformSurfaceExtension() };
+
     VkInstanceCreateInfo instanceInfo = { 0 };
     instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceInfo.pApplicationInfo = &appInfo;
+    instanceInfo.enabledExtensionCount = 2;
+    instanceInfo.ppEnabledExtensionNames = instanceExtensions;
 
     VkInstance instance;
-    if (globalTable.vkCreateInstance(&instanceInfo, NULL, &instance) != VK_SUCCESS) {
-        dokUnloadVulkan(loader);
-        return 1;
-    }
+    globalTable.vkCreateInstance(&instanceInfo, NULL, &instance);
 
     DokInstanceTable instanceTable = { 0 };
-    dokLoadInstanceTable(globalTable.vkGetInstanceProcAddr, instance, &instanceTable);
+    dokLoadInstanceTable(instanceProcAddr, instance, &instanceTable);
+
+    DokWindow window;
+    dokCreateWindow("PEPE", 930, 200, &window);
+
+    VkSurfaceKHR surface;
+    dokCreateWindowSurface(&instanceTable, window, &surface);
 
     uint32_t deviceCount = 0;
     instanceTable.vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
 
-    VkPhysicalDevice* devices = (VkPhysicalDevice*) malloc(deviceCount * sizeof(VkPhysicalDevice));
-    instanceTable.vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
+    VkPhysicalDevice* physicalDevices = (VkPhysicalDevice*) malloc(deviceCount * sizeof(VkPhysicalDevice));
+    instanceTable.vkEnumeratePhysicalDevices(instance, &deviceCount, physicalDevices);
 
-    VkPhysicalDevice device = devices[0];
-    free(devices);
+    VkPhysicalDevice physicalDevice = physicalDevices[0];
+    free(physicalDevices);
 
     uint32_t queueFamily = 0;
-    dok_get_device_queue_family(&instanceTable, device, VK_QUEUE_GRAPHICS_BIT, &queueFamily);
+    dokGetDeviceQueueFamily(&instanceTable, physicalDevice, VK_QUEUE_GRAPHICS_BIT, &queueFamily);
 
     float priority = 1.0;
 
@@ -76,8 +85,36 @@ int main() {
     queueInfo.queueCount = 1;
     queueInfo.pQueuePriorities = &priority;
 
-    DokWindow window;
-    dokCreateWindow("PEPE", 930, 200, &window);
+    const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+    VkPhysicalDeviceVulkan12Features enabledVk12Features = { 0 };
+    enabledVk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    enabledVk12Features.descriptorIndexing = VK_TRUE;
+    enabledVk12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    enabledVk12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
+    enabledVk12Features.runtimeDescriptorArray = VK_TRUE;
+    enabledVk12Features.bufferDeviceAddress = VK_TRUE;
+
+    VkPhysicalDeviceVulkan13Features enabledVk13Features = { 0 };
+    enabledVk13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    enabledVk13Features.pNext = &enabledVk12Features;
+    enabledVk13Features.synchronization2 = VK_TRUE;
+    enabledVk13Features.dynamicRendering = VK_TRUE;
+
+    VkPhysicalDeviceFeatures enabledVk10Features = { 0 };
+    enabledVk10Features.samplerAnisotropy = VK_TRUE;
+
+    VkDeviceCreateInfo deviceInfo = { 0 };
+    deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceInfo.pNext = &enabledVk13Features;
+    deviceInfo.queueCreateInfoCount = 1;
+    deviceInfo.pQueueCreateInfos = &queueInfo;
+    deviceInfo.enabledExtensionCount = 1;
+    deviceInfo.ppEnabledExtensionNames = deviceExtensions;
+    deviceInfo.pEnabledFeatures = &enabledVk10Features;
+
+    VkDevice device;
+    instanceTable.vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device);
 
     while (dokWindowExists(window)) {
         dokPollWindow(window);

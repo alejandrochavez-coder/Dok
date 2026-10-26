@@ -15,12 +15,9 @@ add_library (dok STATIC
 add_library (dok::dok ALIAS dok)
 
 if (BUILD_TESTING)
-
 	add_subdirectory(test)
 	add_test(NAME DokTest COMMAND dok_test)
-
 endif()
-
 
 target_include_directories(dok PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
@@ -28,11 +25,12 @@ target_include_directories(dok PUBLIC
 )
 
 if (WIN32)
-	target_sources(dok PRIVATE src/dok_window_win32.c
-	    src/dok_vulkan_loader_win32.c)
-else()
-	target_link_libraries(dok PUBLIC ${CMAKE_DL_LIBS})
+	target_sources(dok PRIVATE 
+		src/dok_window_win32.c
+	    src/dok_vulkan_loader_win32.c
+	)
 endif()
+
 
 find_package(Vulkan QUIET)
 

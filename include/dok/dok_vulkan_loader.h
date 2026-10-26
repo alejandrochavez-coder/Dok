@@ -2,7 +2,7 @@
 
 typedef struct DokVkLoader_T* DokVkLoader;
 
-DokVkLoader dokLoadVulkan();
+void dokLoadVulkan(DokVkLoader* pOut);
 
 void* dokGetFunction(DokVkLoader loader, const char* name);
 
