@@ -116,9 +116,39 @@ int main() {
     VkDevice device;
     instanceTable.vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device);
 
-    while (dokWindowExists(window)) {
-        dokPollWindow(window);
-    }
+    DokDeviceTable deviceTable = { 0 };
+    dokLoadDeviceTable(instanceTable.vkGetDeviceProcAddr, device, &deviceTable);
+
+    VkSurfaceCapabilitiesKHR surfaceCapabilities;
+    instanceTable.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+
+    VkSwapchainCreateInfoKHR swapchainInfo = { 0 };
+    swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchainInfo.surface = surface;
+    swapchainInfo.minImageCount = surfaceCapabilities.minImageCount,
+    swapchainInfo.imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
+    swapchainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+    swapchainInfo.imageExtent = surfaceCapabilities.currentExtent;
+    swapchainInfo.imageArrayLayers = 1;
+    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchainInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+    VkSwapchainKHR swapchain;
+    deviceTable.vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain);
+
+    uint32_t imageCount;
+    deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, NULL);
+
+    VkImage* images = (VkImage*) malloc(imageCount * sizeof(VkImage));
+    deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images);
+
+    // return 0;
+
+    // while (dokWindowExists(window)) {
+    //     dokPollWindow(window);
+    // }
 
     dokUnloadVulkan(loader);
     dokFreeWindow(window);

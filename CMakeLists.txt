@@ -25,6 +25,7 @@ target_include_directories(dok PUBLIC
 )
 
 if (WIN32)
+	target_link_libraries(dok PRIVATE user32)
 	target_sources(dok PRIVATE 
 		src/dok_window_win32.c
 	    src/dok_vulkan_loader_win32.c

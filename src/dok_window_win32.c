@@ -62,6 +62,8 @@ void dokCreateWindow(const char* title, int height, int width, DokWindow* pOut) 
     window->exists = true;
     
     SetProp(window_handle, PROP_KEY, window);
+    dokPollWindow(window);
+
     ShowWindow(window_handle, SW_SHOW);
 
     *pOut = window;
@@ -106,6 +108,7 @@ void dokFreeWindow(DokWindow window) {
     if (window->handle) {
         RemovePropW(window->handle, L"Dok");
         DestroyWindow(window->handle);
+        dokPollWindow(window);
         window->handle = NULL;
     }
 
@@ -113,7 +116,7 @@ void dokFreeWindow(DokWindow window) {
 }
 
 void dokPollWindow(DokWindow window) {
-    MSG msg = { };
+    MSG msg = { 0 };
     while (PeekMessage(&msg, window->handle, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
