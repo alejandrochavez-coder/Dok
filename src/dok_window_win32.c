@@ -15,15 +15,20 @@ const char* PROP_KEY = "Dok";
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     DokWindow window = GetProp(hwnd, PROP_KEY);
+    if (!window) {
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
 
     switch (uMsg) {
+
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        break;
+
     case WM_DESTROY:
         window->exists = false;
         PostQuitMessage(0);
         return 0;
-
-    case WM_QUIT:
-        window->exists = false;
 
     }
 
@@ -62,7 +67,7 @@ void dokCreateWindow(const char* title, int height, int width, DokWindow* pOut) 
     window->exists = true;
     
     SetProp(window_handle, PROP_KEY, window);
-    dokPollWindow(window);
+    // dokPollWindow(window);
 
     ShowWindow(window_handle, SW_SHOW);
 
@@ -100,6 +105,19 @@ VkResult dokCreateWindowSurface(DokInstanceTable* instanceTable, DokWindow windo
     return createSurface(instanceTable->instance, &info, NULL, pSurface);
 }
 
+void dokGetWindowSize(DokWindow window, uint32_t* widthOut, uint32_t* heightOut) {
+    RECT size;
+    GetClientRect(window->handle, &size);
+
+    if (widthOut) {
+        *widthOut = (uint32_t)size.right;
+    }
+
+    if (heightOut) {
+        *heightOut = (uint32_t)size.bottom;
+    }
+}
+
 bool dokWindowExists(DokWindow window) {
     return window->exists;
 }
@@ -108,8 +126,10 @@ void dokFreeWindow(DokWindow window) {
     if (window->handle) {
         RemovePropW(window->handle, L"Dok");
         DestroyWindow(window->handle);
-        dokPollWindow(window);
-        window->handle = NULL;
+    }
+
+    if (window->hInstance) {
+        UnregisterClass(CLASS_NAME, window->hInstance);
     }
 
     free(window);

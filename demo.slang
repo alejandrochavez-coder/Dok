@@ -1,32 +1,55 @@
-RWTexture2D<float4> texFrame;
-uniform float iTime;
-uniform float2 iResolution;
-uniform float4 iMouse;
-uniform float3 eye;
+struct VSInput {
+    float3 Pos;
+    float3 Normal;
+    float2 UV;
+};
 
-static const uint MAX_ITERATIONS = 64;
+Sampler2D textures[];
 
-uint mandelbrot(float2 z) {
-	float2 c = z;
-	
-	for (uint i = 0; i < MAX_ITERATIONS; i++) {
-		if (dot(z, z) > 256) {
-			return i;
-		}
-		
-		z = float2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y)
-			+ c;
-	}
-	return MAX_ITERATIONS;
+struct ShaderData {
+    float4x4 projection;
+    float4x4 view;
+    float4x4 model[3];
+    float4 lightPos;
+    uint32_t selected;
+};
+
+struct VSOutput {
+    float4 Pos : SV_POSITION;
+    float3 Normal;
+    float2 UV;
+    float3 Factor;
+    float3 LightVec;
+    float3 ViewVec;
+    uint32_t InstanceIndex;
+};
+
+[shader("vertex")]
+VSOutput main(VSInput input, uniform ShaderData *shaderData, uint instanceIndex : SV_VulkanInstanceID) {
+    VSOutput output;
+    float4x4 modelMat = shaderData->model[instanceIndex];
+    output.Normal = mul((float3x3)mul(shaderData->view, modelMat), input.Normal);
+    output.UV = input.UV;
+    output.Pos = mul(shaderData->projection, mul(shaderData->view, mul(modelMat, float4(input.Pos.xyz, 1.0))));
+    output.Factor = (shaderData->selected == instanceIndex ? 3.0f : 1.0f);
+    output.InstanceIndex = instanceIndex;
+    // Calculate view vectors required for lighting
+    float4 fragPos = mul(mul(shaderData->view, modelMat), float4(input.Pos.xyz, 1.0));
+    output.LightVec = shaderData->lightPos.xyz - fragPos.xyz;
+    output.ViewVec = -fragPos.xyz;
+    return output;
 }
 
-[shader("compute")]
-[numthreads(16, 16, 1)]
-void main(uint2 thread: SV_DispatchThreadID) {
-	float2 uv = thread / iResolution * (sin(2 * iTime) / 2 + 1);
-	uv = 4 * uv - 2;
-	uint i = mandelbrot(uv);
-	float3 color = float(i) / MAX_ITERATIONS * eye;
-	color *= sin(i);
-	texFrame[thread] = float4(color, 1.0) * iMouse;
+[shader("fragment")]
+float4 main(VSOutput input) {
+    // Phong lighting
+    float3 N = normalize(input.Normal);
+    float3 L = normalize(input.LightVec);
+    float3 V = normalize(input.ViewVec);
+    float3 R = reflect(-L, N);
+    float3 diffuse = max(dot(N, L), 0.0025);
+    float3 specular = pow(max(dot(R, V), 0.0), 16.0) * 0.75;
+    // Sample from texture
+    float3 color = textures[NonUniformResourceIndex(input.InstanceIndex)].Sample(input.UV).rgb * input.Factor;
+    return float4(diffuse * color.rgb + specular, 1.0);
 }

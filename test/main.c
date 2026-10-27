@@ -144,11 +144,68 @@ int main() {
     VkImage* images = (VkImage*) malloc(imageCount * sizeof(VkImage));
     deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images);
 
-    // return 0;
+    VkFormat formats[] = { VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT };
+    VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
-    // while (dokWindowExists(window)) {
-    //     dokPollWindow(window);
-    // }
+    for (uint32_t i = 0; i < 2; i++) {
+        VkFormatProperties2 formatProperties = { 0 };
+        formatProperties.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+        instanceTable.vkGetPhysicalDeviceFormatProperties2(physicalDevice, formats[i], &formatProperties);
+
+        if (formatProperties.formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+            depthFormat = formats[i];
+            break;
+        }
+    }
+
+    VkImageSubresourceRange subresourceRange = { 0 };
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+
+    for (uint32_t i = 0; i < imageCount; i++) {
+        VkImageViewCreateInfo viewInfo = { 0 };
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = images[i];
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = depthFormat;
+        viewInfo.subresourceRange = subresourceRange;
+
+        VkImageView imageView;
+        deviceTable.vkCreateImageView(device, &viewInfo, NULL, &imageView);
+    }
+
+    VkCommandPoolCreateInfo commandPoolInfo = { 0 };
+    commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    commandPoolInfo.queueFamilyIndex = queueFamily;
+
+    VkCommandPool commandPool;
+    deviceTable.vkCreateCommandPool(device, &commandPoolInfo, NULL, &commandPool);
+
+
+    // uint32_t windowWidth;
+    // uint32_t windowHeight;
+
+    // dokGetWindowSize(window, &windowWidth, &windowHeight);
+    // VkExtent3D imageExtent = { 0 };
+    // imageExtent.width = windowWidth;
+    // imageExtent.height = windowHeight;
+    // imageExtent.depth = 1;
+
+    // VkImageCreateInfo imageInfo = { 0 };
+    // imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    // imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    // imageInfo.format = depthFormat;
+    // imageInfo.extent = imageExtent;
+    // imageInfo.mipLevels = 1;
+    // imageInfo.arrayLayers = 1;
+    // imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    // imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    // imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    // imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    //
 
     dokUnloadVulkan(loader);
     dokFreeWindow(window);

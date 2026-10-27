@@ -21,6 +21,11 @@ VkResult dokCreateWindowSurface(
     DokWindow           window,
     VkSurfaceKHR*       pSurface);
 
+void dokGetWindowSize(
+    DokWindow   window,
+    uint32_t*   widthOut, 
+    uint32_t*   heightOut);
+
 bool dokWindowExists(DokWindow window);
 
 void dokFreeWindow(DokWindow window);
