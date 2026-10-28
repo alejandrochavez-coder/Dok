@@ -70,13 +70,14 @@ void recordCommandBuffer(
     VkImage image,
     VkImageView imageView,
     uint32_t windowWidth,
-    uint32_t windowHeight
+    uint32_t windowHeight,
+    VkPipeline pipeline
 ) {
     VkCommandBufferBeginInfo beginInfo = { 0 };
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
     deviceTable->vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
     transitionImageLayout(deviceTable, commandBuffer, image);
 
     VkClearColorValue clearColor = { 0 };
@@ -109,9 +110,23 @@ void recordCommandBuffer(
 
     deviceTable->vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
-    deviceTable->vkCmdEndRendering(commandBuffer);
-    transitionImageLayout(deviceTable, commandBuffer, image);
+//COMMANDS
+    VkViewport viewport = { 0 };
+    viewport.width = windowWidth;
+    viewport.height = windowHeight;
+    viewport.maxDepth = 1.0f;
 
+    VkRect2D scissors = { 0 };
+    scissors.extent = renderExtent;
+
+    deviceTable->vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    deviceTable->vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
+    deviceTable->vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    deviceTable->vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    deviceTable->vkCmdEndRendering(commandBuffer);
+
+    transitionImageLayout(deviceTable, commandBuffer, image);
     deviceTable->vkEndCommandBuffer(commandBuffer);
 }
 
@@ -203,9 +218,12 @@ int main() {
 
     VkDevice device;
     instanceTable.vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device);
-
+    
     DokDeviceTable deviceTable = { 0 };
     dokLoadDeviceTable(instanceTable.vkGetDeviceProcAddr, device, &deviceTable);
+
+    VkQueue queue;
+    deviceTable.vkGetDeviceQueue(device, queueFamily, 0, &queue);
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     instanceTable.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
@@ -228,12 +246,6 @@ int main() {
     VkSwapchainKHR swapchain;
     deviceTable.vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain);
 
-    uint32_t imageCount;
-    deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, NULL);
-
-    VkImage* images = (VkImage*) malloc(imageCount * sizeof(VkImage));
-    deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images);
-
     VkFormat formats[] = { VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT };
     VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
@@ -246,6 +258,30 @@ int main() {
             depthFormat = formats[i];
             break;
         }
+    }
+
+    uint32_t imageCount;
+    deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, NULL);
+
+    VkImage* images = (VkImage*) malloc(imageCount * sizeof(VkImage));
+    deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images);
+
+    VkImageView* imageViews = (VkImageView*) malloc(imageCount * sizeof(VkImageView));
+        
+    VkImageSubresourceRange subresourceRange = { 0 };
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+
+    for (uint32_t i = 0; i < imageCount; i++) {
+        VkImageViewCreateInfo viewInfo = { 0 };
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = images[i];
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = depthFormat;
+        viewInfo.subresourceRange = subresourceRange;
+
+        deviceTable.vkCreateImageView(device, &viewInfo, NULL, &imageViews[i]);
     }
 
     VkShaderModuleCreateInfo shaderInfo = { 0 };
@@ -354,6 +390,21 @@ int main() {
     VkPipeline pipeline;
     deviceTable.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
 
+    VkSemaphoreCreateInfo semaphoreInfo = { 0 };
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo = { 0 };
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    VkFence fence;
+    VkSemaphore presentCompleteSemaphore;
+    VkSemaphore renderFinishedSemaphore;
+
+    deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &presentCompleteSemaphore);
+    deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
+    deviceTable.vkCreateFence(device, &fenceInfo, NULL, &fence);
+
     VkCommandPoolCreateInfo commandPoolInfo = { 0 };
     commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -371,22 +422,27 @@ int main() {
 
     deviceTable.vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer);
 
+    while (dokWindowExists(window)) {
+        dokPollWindow(window);
 
-    VkImageSubresourceRange subresourceRange = { 0 };
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresourceRange.levelCount = 1;
-    subresourceRange.layerCount = 1;
+        deviceTable.vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+        deviceTable.vkResetFences(device, 1, &fence);
 
-    for (uint32_t i = 0; i < imageCount; i++) {
-        VkImageViewCreateInfo viewInfo = { 0 };
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = images[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = depthFormat;
-        viewInfo.subresourceRange = subresourceRange;
+        uint32_t imageIndex;
+        deviceTable.vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
+        
+        deviceTable.vkResetCommandBuffer(commandBuffer, 0);
 
-        VkImageView imageView;
-        deviceTable.vkCreateImageView(device, &viewInfo, NULL, &imageView);
+        VkCommandBufferBeginInfo beginInfo = { 0 };
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        deviceTable.vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+        VkImageSubresourceRange subresourceRange = { 0 };
+        subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        subresourceRange.levelCount = 1;
+        subresourceRange.layerCount = 1;
 
         VkImageMemoryBarrier2 barrier = { 0 };
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -396,7 +452,116 @@ int main() {
         barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.image = images[imageIndex];
+        barrier.subresourceRange = subresourceRange;
+
+        VkDependencyInfo dependencyInfo = { 0 };
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependencyInfo.imageMemoryBarrierCount = 1;
+        dependencyInfo.pImageMemoryBarriers = &barrier;
+
+        deviceTable.vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+
+        VkClearColorValue clearColor = { 0 };
+        clearColor.float32[2] = 0.2f;
+        clearColor.float32[3] = 1.0f;
+
+        VkClearValue clearValue = { 0 };
+        clearValue.color = clearColor;
+
+        VkRenderingAttachmentInfo attachmentInfo = { 0 };
+        attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        attachmentInfo.imageView = imageViews[imageIndex];
+        attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        attachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachmentInfo.clearValue = clearValue;
+
+        VkExtent2D renderExtent = { 0 };
+        renderExtent.width = windowWidth;
+        renderExtent.height = windowHeight;
+
+        VkRect2D renderArea = { 0 };
+        renderArea.extent = renderExtent;
+
+        VkRenderingInfo renderingInfo = { 0 };
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.renderArea = renderArea;
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachments = &attachmentInfo;
+
+        deviceTable.vkCmdBeginRendering(commandBuffer, &renderingInfo);
+
+        VkViewport viewport = { 0 };
+        viewport.width = windowWidth;
+        viewport.height = windowHeight;
+        viewport.maxDepth = 1.0f;
+
+        VkRect2D scissors = { 0 };
+        scissors.extent = renderExtent;
+
+        deviceTable.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        deviceTable.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
+        deviceTable.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+        deviceTable.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+        deviceTable.vkCmdEndRendering(commandBuffer);
+
+        deviceTable.vkEndCommandBuffer(commandBuffer);
+
+        // VkSemaphoreSubmitInfo waitSemaphoreInfo = { 0 };
+        // waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        // waitSemaphoreInfo.semaphore = presentCompleteSemaphore;
+        // waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        // VkCommandBufferSubmitInfo commandBufferSubmitInfo = { 0 };
+        // commandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+        // commandBufferSubmitInfo.commandBuffer = commandBuffer;
+
+        // VkSemaphoreSubmitInfo signalSemaphoreInfo = { 0 };
+        // signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        // signalSemaphoreInfo.semaphore = renderFinishedSemaphore;
+        // signalSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        // VkSubmitInfo2 submitInfo = { 0 };
+        // submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+        // submitInfo.waitSemaphoreInfoCount = 1;
+        // submitInfo.pWaitSemaphoreInfos = &waitSemaphoreInfo;
+        // submitInfo.commandBufferInfoCount = 1;
+        // submitInfo.pCommandBufferInfos = &commandBufferSubmitInfo;
+        // submitInfo.signalSemaphoreInfoCount = 1;
+        // submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
+
+        // deviceTable.vkQueueSubmit2(queue, 1, &submitInfo, fence);
+
+        VkPipelineStageFlags waitDestinationStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        VkSubmitInfo submitInfo = { 0 };
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = &presentCompleteSemaphore;
+        submitInfo.pWaitDstStageMask = &waitDestinationStageMask;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &renderFinishedSemaphore;
+
+        deviceTable.vkQueueSubmit(queue, 1, &submitInfo, fence);
+
+        VkPresentInfoKHR presentInfo = { 0 };
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &renderFinishedSemaphore;
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = &swapchain;
+        presentInfo.pImageIndices = &imageIndex;
+
+        deviceTable.vkQueuePresentKHR(queue, &presentInfo);
     }
+
+
 
 
 
