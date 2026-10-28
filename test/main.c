@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+const uint8_t spirvShader[] = {
+    #embed "demo.spv"
+};
+
 VkBool32 dokGetDeviceQueueFamily(
     DokInstanceTable*   instanceTable,
     VkPhysicalDevice    physicalDevice,
@@ -64,6 +68,10 @@ int main() {
 
     VkSurfaceKHR surface;
     dokCreateWindowSurface(&instanceTable, window, &surface);
+
+    uint32_t windowWidth;
+    uint32_t windowHeight;
+    dokGetWindowSize(window, &windowWidth, &windowHeight);
 
     uint32_t deviceCount = 0;
     instanceTable.vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
@@ -182,6 +190,59 @@ int main() {
 
     VkCommandPool commandPool;
     deviceTable.vkCreateCommandPool(device, &commandPoolInfo, NULL, &commandPool);
+
+    VkShaderModuleCreateInfo shaderInfo = { 0 };
+    shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderInfo.codeSize = sizeof(spirvShader);
+    shaderInfo.pCode = (uint32_t*)spirvShader;
+
+    VkShaderModule shaderModule;
+    deviceTable.vkCreateShaderModule(device, &shaderInfo, NULL, &shaderModule);
+
+    VkPipelineShaderStageCreateInfo vertexInfo = { 0 };
+    vertexInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertexInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertexInfo.module = shaderModule;
+    vertexInfo.pName = "vertMain";
+
+    VkPipelineShaderStageCreateInfo fragInfo = { 0 };
+    fragInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragInfo.module = shaderModule;
+    vertexInfo.pName = "fragMain";
+
+    VkPipelineShaderStageCreateInfo stagesInfo[] = { vertexInfo, fragInfo };
+
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+
+    VkPipelineDynamicStateCreateInfo dynamicState = { 0 };
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = sizeof(dynamicStates) / sizeof(dynamicStates[0]);
+    dynamicState.pDynamicStates = dynamicStates;
+
+    VkPipelineVertexInputStateCreateInfo vertexInputState = { 0 };
+    vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    // vertexInputState.vertexBindingDescriptionCount 
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly = { 0 };
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport = { 0 };
+    viewport.height = (float) windowHeight;
+    viewport.width = (float) windowWidth;
+    viewport.maxDepth = 1.0f;
+
+    VkExtent2D scissorExtent = { 0 };
+    scissorExtent.height = windowHeight;
+    scissorExtent.width = windowWidth;
+
+    VkRect2D scissor = { 0 };
+    scissor.extent = scissorExtent;
+
+    VkPipelineViewportStateCreateInfo viewportState = { 0 };
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
 
 
     // uint32_t windowWidth;
