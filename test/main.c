@@ -278,7 +278,8 @@ int main() {
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = images[i];
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = depthFormat;
+        // viewInfo.format = depthFormat;
+        viewInfo.format = VK_FORMAT_B8G8R8A8_SRGB;
         viewInfo.subresourceRange = subresourceRange;
 
         deviceTable.vkCreateImageView(device, &viewInfo, NULL, &imageViews[i]);
@@ -366,30 +367,6 @@ int main() {
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &imageFormat;
 
-    VkPipelineDepthStencilStateCreateInfo depthStencilState = { 0 };
-    depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencilState.depthTestEnable = VK_TRUE;
-    depthStencilState.depthWriteEnable = VK_TRUE;
-    depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-
-    VkGraphicsPipelineCreateInfo pipelineInfo = { 0 };
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = &renderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = stagesInfo;
-    pipelineInfo.pVertexInputState = &vertexInputState;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizationState;
-    pipelineInfo.pMultisampleState = &multisampleState;
-    pipelineInfo.pColorBlendState = &colorBlendState;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.pDepthStencilState = &depthStencilState;
-    pipelineInfo.layout = pipelineLayout;
-
-    VkPipeline pipeline;
-    deviceTable.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
-
     VkSemaphoreCreateInfo semaphoreInfo = { 0 };
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -422,16 +399,29 @@ int main() {
 
     deviceTable.vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer);
 
-    while (dokWindowExists(window)) {
-        dokPollWindow(window);
+    VkGraphicsPipelineCreateInfo pipelineInfo = { 0 };
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.pNext = &renderingInfo;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = stagesInfo;
+    pipelineInfo.pVertexInputState = &vertexInputState;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizationState;
+    pipelineInfo.pMultisampleState = &multisampleState;
+    pipelineInfo.pColorBlendState = &colorBlendState;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipelineLayout;
 
+    VkPipeline pipeline;
+    deviceTable.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
+
+    while (dokWindowExists(window)) {
         deviceTable.vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
         deviceTable.vkResetFences(device, 1, &fence);
 
         uint32_t imageIndex;
         deviceTable.vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
-        
-        deviceTable.vkResetCommandBuffer(commandBuffer, 0);
 
         VkCommandBufferBeginInfo beginInfo = { 0 };
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -446,12 +436,12 @@ int main() {
 
         VkImageMemoryBarrier2 barrier = { 0 };
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+        barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
         barrier.srcAccessMask = VK_ACCESS_2_NONE;
-        barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-        barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         barrier.image = images[imageIndex];
         barrier.subresourceRange = subresourceRange;
 
@@ -501,15 +491,34 @@ int main() {
         VkRect2D scissors = { 0 };
         scissors.extent = renderExtent;
 
+        deviceTable.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         deviceTable.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         deviceTable.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
-        deviceTable.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
         deviceTable.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
         deviceTable.vkCmdEndRendering(commandBuffer);
 
+        VkImageMemoryBarrier2 barrierPresent = { 0 };
+        barrierPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrierPresent.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        barrierPresent.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrierPresent.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+        barrierPresent.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        barrierPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        barrierPresent.image = images[imageIndex];
+        barrierPresent.subresourceRange = subresourceRange;
+
+        VkDependencyInfo barrierPresentDependencyInfo = { 0 };
+        barrierPresentDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        barrierPresentDependencyInfo.imageMemoryBarrierCount = 1;
+        barrierPresentDependencyInfo.pImageMemoryBarriers = &barrierPresent;
+
+        deviceTable.vkCmdPipelineBarrier2(commandBuffer, &barrierPresentDependencyInfo);
+
         deviceTable.vkEndCommandBuffer(commandBuffer);
+
+        deviceTable.vkQueueWaitIdle(queue);
 
         // VkSemaphoreSubmitInfo waitSemaphoreInfo = { 0 };
         // waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -559,34 +568,12 @@ int main() {
         presentInfo.pImageIndices = &imageIndex;
 
         deviceTable.vkQueuePresentKHR(queue, &presentInfo);
+        dokPollWindow(window);
     }
 
-
-
-
-
-    // uint32_t windowWidth;
-    // uint32_t windowHeight;
-
-    // dokGetWindowSize(window, &windowWidth, &windowHeight);
-    // VkExtent3D imageExtent = { 0 };
-    // imageExtent.width = windowWidth;
-    // imageExtent.height = windowHeight;
-    // imageExtent.depth = 1;
-
-    // VkImageCreateInfo imageInfo = { 0 };
-    // imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    // imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    // imageInfo.format = depthFormat;
-    // imageInfo.extent = imageExtent;
-    // imageInfo.mipLevels = 1;
-    // imageInfo.arrayLayers = 1;
-    // imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    // imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    // imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    // imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    //
+    // while (dokWindowExists(window)) {
+    //     dokPollWindow(window);
+    // }
 
     dokUnloadVulkan(loader);
     dokFreeWindow(window);
