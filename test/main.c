@@ -64,6 +64,57 @@ void transitionImageLayout(
     deviceTable->vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 }
 
+void recordCommandBuffer(
+    DokDeviceTable* deviceTable,
+    VkCommandBuffer commandBuffer,
+    VkImage image,
+    VkImageView imageView,
+    uint32_t windowWidth,
+    uint32_t windowHeight
+) {
+    VkCommandBufferBeginInfo beginInfo = { 0 };
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    deviceTable->vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    transitionImageLayout(deviceTable, commandBuffer, image);
+
+    VkClearColorValue clearColor = { 0 };
+    clearColor.float32[3] = 1;
+
+    VkClearValue clearValue = { 0 };
+    clearValue.color = clearColor;
+
+    VkRenderingAttachmentInfo attachmentInfo = { 0 };
+    attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    attachmentInfo.imageView = imageView;
+    attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachmentInfo.clearValue = clearValue;
+
+    VkExtent2D renderExtent = { 0 };
+    renderExtent.width = windowWidth;
+    renderExtent.height = windowHeight;
+
+    VkRect2D renderArea = { 0 };
+    renderArea.extent = renderExtent;
+
+    VkRenderingInfo renderingInfo = { 0 };
+    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    renderingInfo.renderArea = renderArea;
+    renderingInfo.layerCount = 1;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachments = &attachmentInfo;
+
+    deviceTable->vkCmdBeginRendering(commandBuffer, &renderingInfo);
+
+    deviceTable->vkCmdEndRendering(commandBuffer);
+    transitionImageLayout(deviceTable, commandBuffer, image);
+
+    deviceTable->vkEndCommandBuffer(commandBuffer);
+}
+
 int main() {
     DokVkLoader loader;
     dokLoadVulkan(&loader);
@@ -320,12 +371,6 @@ int main() {
 
     deviceTable.vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer);
 
-    VkCommandBufferBeginInfo beginInfo = { 0 };
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-
-    deviceTable.vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
     VkImageSubresourceRange subresourceRange = { 0 };
     subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
