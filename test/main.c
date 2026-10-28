@@ -130,11 +130,13 @@ int main() {
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     instanceTable.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
 
+    VkFormat imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
+
     VkSwapchainCreateInfoKHR swapchainInfo = { 0 };
     swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainInfo.surface = surface;
     swapchainInfo.minImageCount = surfaceCapabilities.minImageCount,
-    swapchainInfo.imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
+    swapchainInfo.imageFormat = imageFormat;
     swapchainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
     swapchainInfo.imageExtent = surfaceCapabilities.currentExtent;
     swapchainInfo.imageArrayLayers = 1;
@@ -241,8 +243,57 @@ int main() {
     scissor.extent = scissorExtent;
 
     VkPipelineViewportStateCreateInfo viewportState = { 0 };
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizationInfo = { 0 };
+    rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizationInfo.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisampleInfo = { 0 };
+    multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAttachment = { 0 };
+    blendAttachment.colorWriteMask = 0xF;
+
+    VkPipelineColorBlendStateCreateInfo colorBlend = { 0 };
+    colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlend.attachmentCount = 1;
+    colorBlend.pAttachments = &blendAttachment;
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = { 0 };
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    
+    VkPipelineLayout pipelineLayout;
+    deviceTable.vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout);
+
+    VkPipelineRenderingCreateInfo renderingInfo = { 0 };
+    renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachmentFormats = &imageFormat;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo = { 0 };
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.pNext = &renderingInfo;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = stagesInfo;
+    pipelineInfo.pVertexInputState = &vertexInputState;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizationInfo;
+    pipelineInfo.pMultisampleState = &multisampleInfo;
+    pipelineInfo.pColorBlendState = &colorBlend;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipelineLayout;
+
+    VkPipeline pipeline;
+
+    if (deviceTable.vkCreateGraphicsPipelines) {
+
+        deviceTable.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
+    }
 
 
     // uint32_t windowWidth;
