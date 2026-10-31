@@ -35,99 +35,51 @@ VkBool32 dokGetDeviceQueueFamily(
     return VK_FALSE;
 }
 
-void transitionImageLayout(
-    DokDeviceTable* deviceTable,
-    VkCommandBuffer commandBuffer,
-    VkImage image
+VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+    void* userData
 ) {
-    VkImageSubresourceRange subresourceRange = { 0 };
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresourceRange.levelCount = 1;
-    subresourceRange.layerCount = 1;
+    printf("[VULKAN VALIDATION] %s\n", callbackData->pMessage);
 
-    VkImageMemoryBarrier2 barrier = { 0 };
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-    barrier.srcAccessMask = VK_ACCESS_2_NONE;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.image = image;
-    barrier.subresourceRange = subresourceRange;
-
-    VkDependencyInfo dependencyInfo = { 0 };
-    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.imageMemoryBarrierCount = 1;
-    dependencyInfo.pImageMemoryBarriers = &barrier;
-
-    deviceTable->vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+    return VK_FALSE;
 }
 
-void recordCommandBuffer(
-    DokDeviceTable* deviceTable,
-    VkCommandBuffer commandBuffer,
-    VkImage image,
-    VkImageView imageView,
-    uint32_t windowWidth,
-    uint32_t windowHeight,
-    VkPipeline pipeline
-) {
-    VkCommandBufferBeginInfo beginInfo = { 0 };
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    deviceTable->vkBeginCommandBuffer(commandBuffer, &beginInfo);
+VkResult dokCreateVkInstance(DokGlobalTable* globalTable, VkInstance* pOut) {
+    VkApplicationInfo appInfo = { 0 };
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.pApplicationName = "Dok";
+    appInfo.apiVersion = VK_API_VERSION_1_3;
 
-    transitionImageLayout(deviceTable, commandBuffer, image);
+    const char* instanceExtensions[] = { VK_KHR_SURFACE_EXTENSION_NAME, dokGetPlatformSurfaceExtension(), VK_EXT_DEBUG_UTILS_EXTENSION_NAME };
+    const char* validationLayers[] = { "VK_LAYER_KHRONOS_validation" };
 
-    VkClearColorValue clearColor = { 0 };
-    clearColor.float32[3] = 1;
+    VkDebugUtilsMessengerCreateInfoEXT debugInfo = { 0 };
+    debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    debugInfo.messageSeverity = 
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 
-    VkClearValue clearValue = { 0 };
-    clearValue.color = clearColor;
+    debugInfo.messageType =
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
-    VkRenderingAttachmentInfo attachmentInfo = { 0 };
-    attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    attachmentInfo.imageView = imageView;
-    attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentInfo.clearValue = clearValue;
+    debugInfo.pfnUserCallback = debugCallback;
 
-    VkExtent2D renderExtent = { 0 };
-    renderExtent.width = windowWidth;
-    renderExtent.height = windowHeight;
+    VkInstanceCreateInfo instanceInfo = { 0 };
+    instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instanceInfo.pNext = &debugInfo;
+    instanceInfo.pApplicationInfo = &appInfo;
+    instanceInfo.ppEnabledLayerNames = validationLayers;
+    instanceInfo.enabledLayerCount = sizeof(validationLayers) / sizeof(validationLayers[0]);
+    instanceInfo.ppEnabledExtensionNames = instanceExtensions;
+    instanceInfo.enabledExtensionCount = sizeof(instanceExtensions) / sizeof(instanceExtensions[0]);
 
-    VkRect2D renderArea = { 0 };
-    renderArea.extent = renderExtent;
-
-    VkRenderingInfo renderingInfo = { 0 };
-    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.renderArea = renderArea;
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &attachmentInfo;
-
-    deviceTable->vkCmdBeginRendering(commandBuffer, &renderingInfo);
-
-//COMMANDS
-    VkViewport viewport = { 0 };
-    viewport.width = windowWidth;
-    viewport.height = windowHeight;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissors = { 0 };
-    scissors.extent = renderExtent;
-
-    deviceTable->vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    deviceTable->vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
-    deviceTable->vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-    deviceTable->vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-
-    deviceTable->vkCmdEndRendering(commandBuffer);
-
-    transitionImageLayout(deviceTable, commandBuffer, image);
-    deviceTable->vkEndCommandBuffer(commandBuffer);
+    VkInstance instance;
+    return globalTable->vkCreateInstance(&instanceInfo, NULL, pOut);
 }
 
 int main() {
@@ -139,21 +91,8 @@ int main() {
     DokGlobalTable globalTable = { 0 };
     dokLoadGlobalTable(instanceProcAddr, &globalTable);
 
-    VkApplicationInfo appInfo = { 0 };
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Dok";
-    appInfo.apiVersion = VK_API_VERSION_1_3;
-
-    const char* instanceExtensions[] = { VK_KHR_SURFACE_EXTENSION_NAME, dokGetPlatformSurfaceExtension() };
-
-    VkInstanceCreateInfo instanceInfo = { 0 };
-    instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instanceInfo.pApplicationInfo = &appInfo;
-    instanceInfo.enabledExtensionCount = 2;
-    instanceInfo.ppEnabledExtensionNames = instanceExtensions;
-
     VkInstance instance;
-    globalTable.vkCreateInstance(&instanceInfo, NULL, &instance);
+    dokCreateVkInstance(&globalTable, &instance);
 
     DokInstanceTable instanceTable = { 0 };
     dokLoadInstanceTable(instanceProcAddr, instance, &instanceTable);
@@ -246,20 +185,6 @@ int main() {
     VkSwapchainKHR swapchain;
     deviceTable.vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain);
 
-    VkFormat formats[] = { VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT };
-    VkFormat depthFormat = VK_FORMAT_UNDEFINED;
-
-    for (uint32_t i = 0; i < 2; i++) {
-        VkFormatProperties2 formatProperties = { 0 };
-        formatProperties.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
-        instanceTable.vkGetPhysicalDeviceFormatProperties2(physicalDevice, formats[i], &formatProperties);
-
-        if (formatProperties.formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-            depthFormat = formats[i];
-            break;
-        }
-    }
-
     uint32_t imageCount;
     deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, NULL);
 
@@ -278,7 +203,6 @@ int main() {
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = images[i];
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        // viewInfo.format = depthFormat;
         viewInfo.format = VK_FORMAT_B8G8R8A8_SRGB;
         viewInfo.subresourceRange = subresourceRange;
 
@@ -287,7 +211,7 @@ int main() {
 
     VkShaderModuleCreateInfo shaderInfo = { 0 };
     shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shaderInfo.codeSize = sizeof(spirvShader) / spirvShader[0] * sizeof(uint32_t);
+    shaderInfo.codeSize = sizeof(spirvShader);
     shaderInfo.pCode = (uint32_t*)spirvShader;
 
     VkShaderModule shaderModule;
@@ -303,9 +227,9 @@ int main() {
     fragInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fragInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     fragInfo.module = shaderModule;
-    vertexInfo.pName = "fragMain";
+    fragInfo.pName = "fragMain";
 
-    VkPipelineShaderStageCreateInfo stagesInfo[] = { vertexInfo, fragInfo };
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertexInfo, fragInfo };
 
     VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
@@ -317,21 +241,9 @@ int main() {
     VkPipelineVertexInputStateCreateInfo vertexInputState = { 0 };
     vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly = { 0 };
-    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-    VkViewport viewport = { 0 };
-    viewport.height = (float) windowHeight;
-    viewport.width = (float) windowWidth;
-    viewport.maxDepth = 1.0f;
-
-    VkExtent2D scissorExtent = { 0 };
-    scissorExtent.height = windowHeight;
-    scissorExtent.width = windowWidth;
-
-    VkRect2D scissor = { 0 };
-    scissor.extent = scissorExtent;
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = { 0 };
+    inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
     VkPipelineViewportStateCreateInfo viewportState = { 0 };
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -340,8 +252,6 @@ int main() {
 
     VkPipelineRasterizationStateCreateInfo rasterizationState = { 0 };
     rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizationState.lineWidth = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multisampleState = { 0 };
@@ -349,7 +259,7 @@ int main() {
     multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
     VkPipelineColorBlendAttachmentState blendAttachment = { 0 };
-    blendAttachment.colorWriteMask = 0xF;
+    blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
     VkPipelineColorBlendStateCreateInfo colorBlendState = { 0 };
     colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -403,9 +313,9 @@ int main() {
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.pNext = &renderingInfo;
     pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = stagesInfo;
+    pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputState;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pInputAssemblyState = &inputAssemblyState;
     pipelineInfo.pViewportState = &viewportState;
     pipelineInfo.pRasterizationState = &rasterizationState;
     pipelineInfo.pMultisampleState = &multisampleState;
@@ -417,6 +327,8 @@ int main() {
     deviceTable.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
 
     while (dokWindowExists(window)) {
+        dokPollWindow(window);
+
         deviceTable.vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
         deviceTable.vkResetFences(device, 1, &fence);
 
@@ -496,7 +408,6 @@ int main() {
         deviceTable.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
 
         deviceTable.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-
         deviceTable.vkCmdEndRendering(commandBuffer);
 
         VkImageMemoryBarrier2 barrierPresent = { 0 };
@@ -520,44 +431,30 @@ int main() {
 
         deviceTable.vkQueueWaitIdle(queue);
 
-        // VkSemaphoreSubmitInfo waitSemaphoreInfo = { 0 };
-        // waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-        // waitSemaphoreInfo.semaphore = presentCompleteSemaphore;
-        // waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkSemaphoreSubmitInfo waitSemaphoreInfo = { 0 };
+        waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        waitSemaphoreInfo.semaphore = presentCompleteSemaphore;
+        waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-        // VkCommandBufferSubmitInfo commandBufferSubmitInfo = { 0 };
-        // commandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-        // commandBufferSubmitInfo.commandBuffer = commandBuffer;
+        VkCommandBufferSubmitInfo commandBufferSubmitInfo = { 0 };
+        commandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+        commandBufferSubmitInfo.commandBuffer = commandBuffer;
 
-        // VkSemaphoreSubmitInfo signalSemaphoreInfo = { 0 };
-        // signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-        // signalSemaphoreInfo.semaphore = renderFinishedSemaphore;
-        // signalSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkSemaphoreSubmitInfo signalSemaphoreInfo = { 0 };
+        signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        signalSemaphoreInfo.semaphore = renderFinishedSemaphore;
+        signalSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-        // VkSubmitInfo2 submitInfo = { 0 };
-        // submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-        // submitInfo.waitSemaphoreInfoCount = 1;
-        // submitInfo.pWaitSemaphoreInfos = &waitSemaphoreInfo;
-        // submitInfo.commandBufferInfoCount = 1;
-        // submitInfo.pCommandBufferInfos = &commandBufferSubmitInfo;
-        // submitInfo.signalSemaphoreInfoCount = 1;
-        // submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
+        VkSubmitInfo2 submitInfo = { 0 };
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+        submitInfo.waitSemaphoreInfoCount = 1;
+        submitInfo.pWaitSemaphoreInfos = &waitSemaphoreInfo;
+        submitInfo.commandBufferInfoCount = 1;
+        submitInfo.pCommandBufferInfos = &commandBufferSubmitInfo;
+        submitInfo.signalSemaphoreInfoCount = 1;
+        submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
 
-        // deviceTable.vkQueueSubmit2(queue, 1, &submitInfo, fence);
-
-        VkPipelineStageFlags waitDestinationStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-        VkSubmitInfo submitInfo = { 0 };
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &presentCompleteSemaphore;
-        submitInfo.pWaitDstStageMask = &waitDestinationStageMask;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer;
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &renderFinishedSemaphore;
-
-        deviceTable.vkQueueSubmit(queue, 1, &submitInfo, fence);
+        deviceTable.vkQueueSubmit2(queue, 1, &submitInfo, fence);
 
         VkPresentInfoKHR presentInfo = { 0 };
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -568,12 +465,7 @@ int main() {
         presentInfo.pImageIndices = &imageIndex;
 
         deviceTable.vkQueuePresentKHR(queue, &presentInfo);
-        dokPollWindow(window);
     }
-
-    // while (dokWindowExists(window)) {
-    //     dokPollWindow(window);
-    // }
 
     dokUnloadVulkan(loader);
     dokFreeWindow(window);
