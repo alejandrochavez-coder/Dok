@@ -9,32 +9,6 @@ alignas(uint32_t) const uint8_t spirvShader[] = {
     #embed "demo.spv"
 };
 
-VkBool32 dokGetDeviceQueueFamily(
-    DokInstanceTable*   instanceTable,
-    VkPhysicalDevice    physicalDevice,
-    uint32_t            requirements,
-    uint32_t*           pOut) {
-
-    uint32_t queueFamilyCount = 0;
-    instanceTable->vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
-
-    VkQueueFamilyProperties* queueFamilies = (VkQueueFamilyProperties*) malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
-    instanceTable->vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
-
-    for (size_t i = 0; i < queueFamilyCount; i++) {
-        if (dokGetPhysicalDevicePresentationSupport(instanceTable, physicalDevice, i) == VK_FALSE) {
-            continue;
-        }
-
-        if (queueFamilies[i].queueFlags & requirements) {
-            *pOut = i;
-            return VK_TRUE;
-        }
-    }
-
-    return VK_FALSE;
-}
-
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT type,
@@ -82,48 +56,57 @@ VkResult dokCreateVkInstance(DokGlobalTable* globalTable, VkInstance* pOut) {
     return globalTable->vkCreateInstance(&instanceInfo, NULL, pOut);
 }
 
-int main() {
-    DokVkLoader loader;
-    dokLoadVulkan(&loader);
+VkBool32 dokGetDeviceQueueFamily(
+    DokInstanceTable*   instanceTable,
+    VkPhysicalDevice    physicalDevice,
+    uint32_t*           pOut) {
 
-    PFN_vkGetInstanceProcAddr instanceProcAddr = (PFN_vkGetInstanceProcAddr) dokGetFunction(loader, "vkGetInstanceProcAddr");
+    uint32_t queueFamilyCount = 0;
+    instanceTable->vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
 
-    DokGlobalTable globalTable = { 0 };
-    dokLoadGlobalTable(instanceProcAddr, &globalTable);
+    VkQueueFamilyProperties* queueFamilies = (VkQueueFamilyProperties*) malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
+    instanceTable->vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
 
-    VkInstance instance;
-    dokCreateVkInstance(&globalTable, &instance);
+    for (size_t i = 0; i < queueFamilyCount; i++) {
+        if (dokGetPhysicalDevicePresentationSupport(instanceTable, physicalDevice, i) == VK_FALSE) {
+            continue;
+        }
 
-    DokInstanceTable instanceTable = { 0 };
-    dokLoadInstanceTable(instanceProcAddr, instance, &instanceTable);
+        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            *pOut = i;
+            return VK_TRUE;
+        }
+    }
 
-    DokWindow window;
-    dokCreateWindow("PEPE", 930, 200, &window);
+    return VK_FALSE;
+}
 
-    VkSurfaceKHR surface;
-    dokCreateWindowSurface(&instanceTable, window, &surface);
+VkBool32 dokChoosePhysicalDevice(DokInstanceTable* instanceTable, VkPhysicalDevice* pOutPhysicalDevice, uint32_t* pOutQueueFamilyIndex) {
+    uint32_t physicalDeviceCount;
+    instanceTable->vkEnumeratePhysicalDevices(instanceTable->instance, &physicalDeviceCount, NULL);
 
-    uint32_t windowWidth;
-    uint32_t windowHeight;
-    dokGetWindowSize(window, &windowWidth, &windowHeight);
+    VkPhysicalDevice* physicalDevices = (VkPhysicalDevice*) malloc(physicalDeviceCount * sizeof(VkPhysicalDevice));
+    instanceTable->vkEnumeratePhysicalDevices(instanceTable->instance, &physicalDeviceCount, physicalDevices);
 
-    uint32_t deviceCount = 0;
-    instanceTable.vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
+    for (uint32_t i = 0; i < physicalDeviceCount; i++) {
+        VkPhysicalDevice physicalDevice = physicalDevices[i];
+        if (dokGetDeviceQueueFamily(instanceTable, physicalDevice, pOutQueueFamilyIndex)) {
+            *pOutPhysicalDevice = physicalDevice;
+            free(physicalDevices);
+            return VK_TRUE;
+        }
+    }
 
-    VkPhysicalDevice* physicalDevices = (VkPhysicalDevice*) malloc(deviceCount * sizeof(VkPhysicalDevice));
-    instanceTable.vkEnumeratePhysicalDevices(instance, &deviceCount, physicalDevices);
-
-    VkPhysicalDevice physicalDevice = physicalDevices[0];
     free(physicalDevices);
+    return VK_FALSE;
+}
 
-    uint32_t queueFamily = 0;
-    dokGetDeviceQueueFamily(&instanceTable, physicalDevice, VK_QUEUE_GRAPHICS_BIT, &queueFamily);
-
+VkResult dokCreateVkDevice(DokInstanceTable* instanceTable, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkDevice* pOut) {
     float priority = 1.0;
 
     VkDeviceQueueCreateInfo queueInfo = { 0 };
     queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueInfo.queueFamilyIndex = queueFamily;
+    queueInfo.queueFamilyIndex = queueFamilyIndex;
     queueInfo.queueCount = 1;
     queueInfo.pQueuePriorities = &priority;
 
@@ -155,17 +138,55 @@ int main() {
     deviceInfo.ppEnabledExtensionNames = deviceExtensions;
     deviceInfo.pEnabledFeatures = &enabledVk10Features;
 
+    return instanceTable->vkCreateDevice(physicalDevice, &deviceInfo, NULL, pOut);
+}
+
+int main() {
+    DokVkLoader loader;
+    dokLoadVulkan(&loader);
+
+    PFN_vkGetInstanceProcAddr instanceProcAddr = (PFN_vkGetInstanceProcAddr) dokGetFunction(loader, "vkGetInstanceProcAddr");
+
+    DokGlobalTable globalTable = { 0 };
+    dokLoadGlobalTable(instanceProcAddr, &globalTable);
+
+    VkInstance instance;
+    dokCreateVkInstance(&globalTable, &instance);
+
+    DokInstanceTable instanceTable = { 0 };
+    dokLoadInstanceTable(instanceProcAddr, instance, &instanceTable);
+
+    VkPhysicalDevice physicalDevice;
+    uint32_t queueFamilyIndex;
+    dokChoosePhysicalDevice(&instanceTable, &physicalDevice, &queueFamilyIndex);
+
     VkDevice device;
-    instanceTable.vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device);
+    dokCreateVkDevice(&instanceTable, physicalDevice, queueFamilyIndex, &device);
     
     DokDeviceTable deviceTable = { 0 };
     dokLoadDeviceTable(instanceTable.vkGetDeviceProcAddr, device, &deviceTable);
 
     VkQueue queue;
-    deviceTable.vkGetDeviceQueue(device, queueFamily, 0, &queue);
+    deviceTable.vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
+
+    DokWindow window;
+    dokCreateWindow("PEPE", 930, 200, &window);
+
+    VkSurfaceKHR surface;
+    dokCreateWindowSurface(&instanceTable, window, &surface);
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     instanceTable.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+
+    VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
+    if (swapchainExtent.width == 0xFFFFFFFF) {
+        uint32_t windowWidth;
+        uint32_t windowHeight;
+        dokGetWindowSize(window, &windowWidth, &windowHeight);
+
+        swapchainExtent.width = windowWidth;
+        swapchainExtent.height = windowHeight;
+    }
 
     VkFormat imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
 
@@ -175,12 +196,12 @@ int main() {
     swapchainInfo.minImageCount = surfaceCapabilities.minImageCount,
     swapchainInfo.imageFormat = imageFormat;
     swapchainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-    swapchainInfo.imageExtent = surfaceCapabilities.currentExtent;
+    swapchainInfo.imageExtent = swapchainExtent;
     swapchainInfo.imageArrayLayers = 1;
     swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchainInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;;
 
     VkSwapchainKHR swapchain;
     deviceTable.vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain);
@@ -295,7 +316,7 @@ int main() {
     VkCommandPoolCreateInfo commandPoolInfo = { 0 };
     commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    commandPoolInfo.queueFamilyIndex = queueFamily;
+    commandPoolInfo.queueFamilyIndex = queueFamilyIndex;
 
     VkCommandPool commandPool;
     deviceTable.vkCreateCommandPool(device, &commandPoolInfo, NULL, &commandPool);
@@ -379,12 +400,8 @@ int main() {
         attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attachmentInfo.clearValue = clearValue;
 
-        VkExtent2D renderExtent = { 0 };
-        renderExtent.width = windowWidth;
-        renderExtent.height = windowHeight;
-
         VkRect2D renderArea = { 0 };
-        renderArea.extent = renderExtent;
+        renderArea.extent = swapchainExtent;
 
         VkRenderingInfo renderingInfo = { 0 };
         renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -396,12 +413,12 @@ int main() {
         deviceTable.vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
         VkViewport viewport = { 0 };
-        viewport.width = windowWidth;
-        viewport.height = windowHeight;
+        viewport.width = swapchainExtent.width;
+        viewport.height = swapchainExtent.height;
         viewport.maxDepth = 1.0f;
 
         VkRect2D scissors = { 0 };
-        scissors.extent = renderExtent;
+        scissors.extent = swapchainExtent;
 
         deviceTable.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         deviceTable.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -465,6 +482,7 @@ int main() {
         presentInfo.pImageIndices = &imageIndex;
 
         deviceTable.vkQueuePresentKHR(queue, &presentInfo);
+        // break;
     }
 
     dokUnloadVulkan(loader);
