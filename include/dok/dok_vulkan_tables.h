@@ -227,6 +227,7 @@ typedef struct DokInstanceTable {
 } DokInstanceTable;
 
 typedef struct DokDeviceTable {
+    VkDevice device;
 #pragma region    PFN_{Device} {Device};
 #if defined(VK_VERSION_1_0) 
     PFN_vkDestroyDevice vkDestroyDevice;
@@ -1311,6 +1312,7 @@ void dokLoadInstanceTable(PFN_vkGetInstanceProcAddr instanceProcAddr, VkInstance
 }
 
 void dokLoadDeviceTable(PFN_vkGetDeviceProcAddr deviceProcAddr, VkDevice device, DokDeviceTable* pOut) {
+    pOut->device = device;
 #pragma region    pOut->{Device} = (PFN_{Device})deviceProcAddr(device, "{Device}");
 #if defined(VK_VERSION_1_0) 
     pOut->vkDestroyDevice = (PFN_vkDestroyDevice)deviceProcAddr(device, "vkDestroyDevice");

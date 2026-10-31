@@ -9,46 +9,20 @@ alignas(uint32_t) const uint8_t spirvShader[] = {
     #embed "demo.spv"
 };
 
-VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-    void* userData
-) {
-    printf("[VULKAN VALIDATION] %s\n", callbackData->pMessage);
-
-    return VK_FALSE;
-}
-
 VkResult dokCreateVkInstance(DokGlobalTable* globalTable, VkInstance* pOut) {
     VkApplicationInfo appInfo = { 0 };
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "Dok";
     appInfo.apiVersion = VK_API_VERSION_1_3;
 
-    const char* instanceExtensions[] = { VK_KHR_SURFACE_EXTENSION_NAME, dokGetPlatformSurfaceExtension(), VK_EXT_DEBUG_UTILS_EXTENSION_NAME };
-    const char* validationLayers[] = { "VK_LAYER_KHRONOS_validation" };
-
-    VkDebugUtilsMessengerCreateInfoEXT debugInfo = { 0 };
-    debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    debugInfo.messageSeverity = 
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-
-    debugInfo.messageType =
-        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-
-    debugInfo.pfnUserCallback = debugCallback;
+    const char* instanceExtensions[] = { 
+        VK_KHR_SURFACE_EXTENSION_NAME, 
+        dokGetPlatformSurfaceExtension() 
+    };
 
     VkInstanceCreateInfo instanceInfo = { 0 };
     instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instanceInfo.pNext = &debugInfo;
     instanceInfo.pApplicationInfo = &appInfo;
-    instanceInfo.ppEnabledLayerNames = validationLayers;
-    instanceInfo.enabledLayerCount = sizeof(validationLayers) / sizeof(validationLayers[0]);
     instanceInfo.ppEnabledExtensionNames = instanceExtensions;
     instanceInfo.enabledExtensionCount = sizeof(instanceExtensions) / sizeof(instanceExtensions[0]);
 
@@ -224,11 +198,16 @@ int main() {
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = images[i];
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = VK_FORMAT_B8G8R8A8_SRGB;
+        viewInfo.format = imageFormat;
         viewInfo.subresourceRange = subresourceRange;
 
         deviceTable.vkCreateImageView(device, &viewInfo, NULL, &imageViews[i]);
     }
+
+    VkPipelineRenderingCreateInfo renderingInfo = { 0 };
+    renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachmentFormats = &imageFormat;
 
     VkShaderModuleCreateInfo shaderInfo = { 0 };
     shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -293,25 +272,22 @@ int main() {
     VkPipelineLayout pipelineLayout;
     deviceTable.vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout);
 
-    VkPipelineRenderingCreateInfo renderingInfo = { 0 };
-    renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachmentFormats = &imageFormat;
+    VkGraphicsPipelineCreateInfo pipelineInfo = { 0 };
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.pNext = &renderingInfo;
+    pipelineInfo.stageCount = sizeof(shaderStages) / sizeof(shaderStages[0]);
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputState;
+    pipelineInfo.pInputAssemblyState = &inputAssemblyState;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizationState;
+    pipelineInfo.pMultisampleState = &multisampleState;
+    pipelineInfo.pColorBlendState = &colorBlendState;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipelineLayout;
 
-    VkSemaphoreCreateInfo semaphoreInfo = { 0 };
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    VkFenceCreateInfo fenceInfo = { 0 };
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    VkFence fence;
-    VkSemaphore presentCompleteSemaphore;
-    VkSemaphore renderFinishedSemaphore;
-
-    deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &presentCompleteSemaphore);
-    deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
-    deviceTable.vkCreateFence(device, &fenceInfo, NULL, &fence);
+    VkPipeline pipeline;
+    deviceTable.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
 
     VkCommandPoolCreateInfo commandPoolInfo = { 0 };
     commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -330,22 +306,20 @@ int main() {
 
     deviceTable.vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer);
 
-    VkGraphicsPipelineCreateInfo pipelineInfo = { 0 };
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = &renderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputState;
-    pipelineInfo.pInputAssemblyState = &inputAssemblyState;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizationState;
-    pipelineInfo.pMultisampleState = &multisampleState;
-    pipelineInfo.pColorBlendState = &colorBlendState;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipelineLayout;
+    VkSemaphoreCreateInfo semaphoreInfo = { 0 };
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    VkPipeline pipeline;
-    deviceTable.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
+    VkFenceCreateInfo fenceInfo = { 0 };
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    VkFence fence;
+    VkSemaphore presentCompleteSemaphore;
+    VkSemaphore renderFinishedSemaphore;
+
+    deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &presentCompleteSemaphore);
+    deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
+    deviceTable.vkCreateFence(device, &fenceInfo, NULL, &fence);
 
     while (dokWindowExists(window)) {
         dokPollWindow(window);
@@ -385,9 +359,9 @@ int main() {
 
         deviceTable.vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 
-        VkClearColorValue clearColor = { 0 };
-        clearColor.float32[2] = 0.2f;
-        clearColor.float32[3] = 1.0f;
+        VkClearColorValue clearColor = {
+            .float32 = {0.0f, 0.0f, 0.0f, 1.0f}
+        };
 
         VkClearValue clearValue = { 0 };
         clearValue.color = clearColor;
@@ -445,7 +419,6 @@ int main() {
         deviceTable.vkCmdPipelineBarrier2(commandBuffer, &barrierPresentDependencyInfo);
 
         deviceTable.vkEndCommandBuffer(commandBuffer);
-
         deviceTable.vkQueueWaitIdle(queue);
 
         VkSemaphoreSubmitInfo waitSemaphoreInfo = { 0 };
