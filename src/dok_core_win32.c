@@ -12,6 +12,13 @@ struct DokWindow_T {
     HWND hwnd;
     HINSTANCE hinstance;
     DokVector destroyObservers;
+    DokVector resizeObservers;
+};
+
+struct DokWindowResizeObserver_T {
+    PFN_dokWindowResizeCallback pfnCallback;
+    void* pUserData;
+    size_t index;
 };
 
 struct DokWindowDestroyObserver_T {
@@ -61,6 +68,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         DestroyWindow(hwnd);
         break;
+
+    case WM_SIZE:
+        uint32_t width = (uint32_t)LOWORD(lParam);
+        uint32_t height =  (uint32_t)HIWORD(lParam);
+        for (int i = 0; i < window->resizeObservers.length; i++) {
+            DokWindowResizeObserver resizeObserver = dokVectorCast(DokWindowResizeObserver, window->resizeObservers.data)[i];
+            resizeObserver->pfnCallback(window, width, height, resizeObserver->pUserData);
+        } 
 
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -120,6 +135,7 @@ DokResult dokCreateWindow(DokWindowCreateInfo* pCreateInfo, DokWindow* pOut) {
     
     SetProp(window->hwnd, PROP_KEY, window);
     dokCreateVector(DokWindowDestroyObserver, &window->destroyObservers);
+    dokCreateVector(DokWindowResizeObserver, &window->resizeObservers);
     ShowWindow(window->hwnd, SW_SHOW);
 
     *pOut = window;
@@ -204,6 +220,22 @@ DokResult dokCreateDestroyObserver(DokWindow window, DokWindowDestroyObserverCre
 
 void dokDestroyDestroyObserver(DokWindow window, DokWindowDestroyObserver observer) {
     dokVectorRemove(DokWindowDestroyObserver, window->destroyObservers, observer->index);
+    free(observer);
+}
+
+DokResult dokCreateResizeObserver(DokWindow window, DokWindowResizeObserverCreateInfo* pCreateInfo, DokWindowResizeObserver* pOut) {
+    DokWindowResizeObserver observer = (DokWindowResizeObserver) malloc(sizeof(struct DokWindowResizeObserver_T));
+    observer->index = window->resizeObservers.length;
+    observer->pfnCallback = pCreateInfo->pfnCallback;
+    observer->pUserData = pCreateInfo->pUserData;
+
+    dokVectorPush(DokWindowResizeObserver, window->resizeObservers, observer);
+    *pOut = observer;
+    return DOK_SUCCESS;
+}
+
+void dokDestroyResizeObserver(DokWindow window, DokWindowResizeObserver observer) {
+    dokVectorRemove(DokWindowDestroyObserver, window->resizeObservers, observer->index);
     free(observer);
 }
 

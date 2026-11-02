@@ -3,6 +3,7 @@
 #include <dok/dok_vulkan_tables.h>
 
 typedef struct DokWindowDestroyObserver_T* DokWindowDestroyObserver;
+typedef struct DokWindowResizeObserver_T* DokWindowResizeObserver;
 typedef struct DokVkLoader_T* DokVkLoader;
 typedef struct DokWindow_T* DokWindow;
 
@@ -14,6 +15,17 @@ typedef enum DokResult {
     DOK_OUT_OF_HOST_MEMORY = 4,
     DOK_WIN32_FAILED_WINDOW_CREATION = 5
 } DokResult;
+
+typedef void (*PFN_dokWindowResizeCallback)(
+    DokWindow   window,
+    uint32_t    width,
+    uint32_t    height,
+    void*       pUserData);
+
+typedef struct DokWindowResizeObserverCreateInfo {
+    PFN_dokWindowResizeCallback pfnCallback;
+    void*                       pUserData;
+} DokWindowResizeObserverCreateInfo;
 
 typedef void (*PFN_dokWindowDestroyCallback)(
     DokWindow   window,
@@ -66,5 +78,14 @@ DokResult dokCreateDestroyObserver(
 void dokDestroyDestroyObserver(
     DokWindow                   window, 
     DokWindowDestroyObserver    observer);
+
+DokResult dokCreateResizeObserver(
+    DokWindow                           window,
+    DokWindowResizeObserverCreateInfo*  pCreateInfo,
+    DokWindowResizeObserver*            pOut);
+
+void dokDestroyResizeObserver(
+    DokWindow               window,
+    DokWindowResizeObserver observer);
 
 void dokPollWindow(DokWindow window);
