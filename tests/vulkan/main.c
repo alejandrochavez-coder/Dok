@@ -1,13 +1,16 @@
-#define DOK_VULKAN_TABLES_IMPLEMENTATION
 #include <dok/dok_vulkan_tables.h>
-#include <dok/dok_vulkan_loader.h>
-#include <dok/dok_window.h>
+#include <dok/dok_core.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 alignas(uint32_t) const uint8_t spirvShader[] = {
     #embed "demo.spv"
 };
+
+void observerDestroy(DokWindow window, void* pUserData) {
+    *((bool*)pUserData) = false;
+}
 
 VkResult dokCreateVkInstance(DokGlobalTable* globalTable, VkInstance* pOut) {
     VkApplicationInfo appInfo = { 0 };
@@ -143,8 +146,13 @@ int main() {
     VkQueue queue;
     deviceTable.vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
 
+    DokWindowCreateInfo windowInfo = { 0 };
+    windowInfo.pTitle = "PEPE";
+    windowInfo.height = 420;
+    windowInfo.width = 720;
+
     DokWindow window;
-    dokCreateWindow("PEPE", 930, 200, &window);
+    dokCreateWindow(&windowInfo, &window);
 
     VkSurfaceKHR surface;
     dokCreateWindowSurface(&instanceTable, window, &surface);
@@ -154,12 +162,7 @@ int main() {
 
     VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
     if (swapchainExtent.width == 0xFFFFFFFF) {
-        uint32_t windowWidth;
-        uint32_t windowHeight;
-        dokGetWindowSize(window, &windowWidth, &windowHeight);
-
-        swapchainExtent.width = windowWidth;
-        swapchainExtent.height = windowHeight;
+        dokGetWindowExtent(window, &swapchainExtent);
     }
 
     VkFormat imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
@@ -321,7 +324,16 @@ int main() {
     deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
     deviceTable.vkCreateFence(device, &fenceInfo, NULL, &fence);
 
-    while (dokWindowExists(window)) {
+    bool windowExists = true;
+
+    DokWindowDestroyObserverCreateInfo destroyObserverInfo = { 0 };
+    destroyObserverInfo.pUserData = &windowExists;
+    destroyObserverInfo.pfnCallback = observerDestroy;
+
+    DokWindowDestroyObserver destroyObserver;
+    dokCreateDestroyObserver(window, &destroyObserverInfo, &destroyObserver);
+
+    while (windowExists) {
         dokPollWindow(window);
 
         deviceTable.vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
@@ -455,7 +467,6 @@ int main() {
         presentInfo.pImageIndices = &imageIndex;
 
         deviceTable.vkQueuePresentKHR(queue, &presentInfo);
-        // break;
     }
 
     dokUnloadVulkan(loader);

@@ -54,11 +54,17 @@ def parse_extension_entries(registry: etree.ElementTree) -> list[CommandEntry]:
 
     for extension in registry.findall("extensions/extension"):
 
-        if "vulkan" not in extension.get("supported").split(",") or extension.get("promotedto") or extension.get("deprecatedby"):
+        if ("vulkan" not in extension.get("supported").split(",") or 
+            extension.get("promotedto") or 
+            extension.get("deprecatedby") or
+            extension.get("platform")):
             continue
 
         extension_name = extension.get("name")
         author = extension.get("author")
+
+        if author not in ["KHR", "EXT"]:
+            continue
 
         for require in extension.findall("require"):
 
@@ -115,7 +121,6 @@ def parse_command_types(registry: etree.ElementTree) -> dict[str, CommandType]:
         
         command_name = command.findtext("proto/name")
         if command_name == "vkGetInstanceProcAddr":
-            command_types[command_name] = CommandType.Global
             continue
 
         if command_name == "vkGetDeviceProcAddr":
@@ -208,4 +213,8 @@ directory = Path(__file__).parent
 registry = get_registry()
 entries = parse_handle_entries(registry)
 
-parse_file(directory / "dok_vulkan_tables.h")
+for file in directory.rglob("*"):
+    if file.stem == "dok_vulkan_tables":
+        parse_file(entries, file)
+
+# parse_file(entries, directory / "dok_vulkan_tables.h")

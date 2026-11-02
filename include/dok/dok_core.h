@@ -1,0 +1,70 @@
+#pragma once
+
+#include <dok/dok_vulkan_tables.h>
+
+typedef struct DokWindowDestroyObserver_T* DokWindowDestroyObserver;
+typedef struct DokVkLoader_T* DokVkLoader;
+typedef struct DokWindow_T* DokWindow;
+
+typedef enum DokResult {
+    DOK_SUCCESS = 0,
+    DOK_FAIL_DLL_LOAD = 1,
+    DOK_ERROR_INITIALIZATION_FAILED = 2,
+    DOK_WIN32_FAILED_CLASS_REGISTRY = 3,
+    DOK_OUT_OF_HOST_MEMORY = 4,
+    DOK_WIN32_FAILED_WINDOW_CREATION = 5
+} DokResult;
+
+typedef void (*PFN_dokWindowDestroyCallback)(
+    DokWindow   window,
+    void*       pUserData);
+
+typedef struct DokWindowDestroyObserverCreateInfo {
+    PFN_dokWindowDestroyCallback    pfnCallback;
+    void*                           pUserData;
+} DokWindowDestroyObserverCreateInfo;
+
+typedef struct DokWindowCreateInfo {
+    const char*         pTitle;
+    uint32_t            height;
+    uint32_t            width;
+} DokWindowCreateInfo;
+
+DokResult dokLoadVulkan(DokVkLoader* pOut);
+
+PFN_vkVoidFunction dokGetFunction(DokVkLoader loader, const char* name);
+
+void dokUnloadVulkan(DokVkLoader loader);
+
+DokResult dokCreateWindow(
+    DokWindowCreateInfo*    pCreateInfo, 
+    DokWindow*              pOut);
+
+const char* dokGetPlatformSurfaceExtension();
+
+VkBool32 dokGetPhysicalDevicePresentationSupport(
+    DokInstanceTable*   instanceTable,
+    VkPhysicalDevice    physicalDevice,
+    uint32_t            queueFamilyIndex);
+
+VkResult dokCreateWindowSurface(
+    DokInstanceTable*   instanceTable,
+    DokWindow           window,
+    VkSurfaceKHR*       pSurface);
+
+DokResult dokGetWindowExtent(
+    DokWindow   window,
+    VkExtent2D* pOut);
+
+void dokFreeWindow(DokWindow window);
+
+DokResult dokCreateDestroyObserver(
+    DokWindow                           window, 
+    DokWindowDestroyObserverCreateInfo* pCreateInfo, 
+    DokWindowDestroyObserver*           pOut);
+
+void dokDestroyDestroyObserver(
+    DokWindow                   window, 
+    DokWindowDestroyObserver    observer);
+
+void dokPollWindow(DokWindow window);

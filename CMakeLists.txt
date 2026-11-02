@@ -2,21 +2,25 @@
 include(FetchContent)
 
 project (dok
-LANGUAGES C
+	LANGUAGES C
 )
 
 include(CTest)
 add_library (dok STATIC
 	"include/dok/dok_vulkan_tables.h"
-	"include/dok/dok.h"
-	"include/dok/dok_window.h"
-	include/dok/dok_vulkan_loader.h
+	"include/dok/dok_core.h"
+	"include/dok/dok_vector.h"
+	src/dok_vulkan_tables.c
 )
 add_library (dok::dok ALIAS dok)
 
 if (BUILD_TESTING)
-	add_subdirectory(test)
-	add_test(NAME DokTest COMMAND dok_test)
+	add_subdirectory(tests/vulkan)
+	add_subdirectory(tests/dynamic_arrays)
+	add_subdirectory(tests/window)
+	add_test(NAME WindowTest COMMAND dok_window_test)
+	add_test(NAME DynamicArraysTest COMMAND dok_dynamic_arrays_test)
+	add_test(NAME VulkanTest COMMAND dok_vulkan_test)
 endif()
 
 target_include_directories(dok PUBLIC
@@ -27,8 +31,7 @@ target_include_directories(dok PUBLIC
 if (WIN32)
 	target_link_libraries(dok PRIVATE user32)
 	target_sources(dok PRIVATE 
-		src/dok_window_win32.c
-	    src/dok_vulkan_loader_win32.c
+		src/dok_core_win32.c
 	)
 endif()
 
