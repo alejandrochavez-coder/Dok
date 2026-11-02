@@ -8,6 +8,14 @@ alignas(uint32_t) const uint8_t spirvShader[] = {
     #embed "demo.spv"
 };
 
+typedef struct DokDevice {
+    VkPhysicalDevice physicalDevice;
+    uint32_t queueFamilyIndex;
+    VkDevice device;
+    DokDeviceTable deviceTable;
+    VkQueue queue;
+} DokDevice;
+
 void observerDestroy(DokWindow window, void* pUserData) {
     *((bool*)pUserData) = false;
 }
@@ -118,94 +126,8 @@ VkResult dokCreateVkDevice(DokInstanceTable* instanceTable, VkPhysicalDevice phy
     return instanceTable->vkCreateDevice(physicalDevice, &deviceInfo, NULL, pOut);
 }
 
-int main() {
-    DokVkLoader loader;
-    dokLoadVulkan(&loader);
-
-    PFN_vkGetInstanceProcAddr instanceProcAddr = (PFN_vkGetInstanceProcAddr) dokGetFunction(loader, "vkGetInstanceProcAddr");
-
-    DokGlobalTable globalTable = { 0 };
-    dokLoadGlobalTable(instanceProcAddr, &globalTable);
-
-    VkInstance instance;
-    dokCreateVkInstance(&globalTable, &instance);
-
-    DokInstanceTable instanceTable = { 0 };
-    dokLoadInstanceTable(instanceProcAddr, instance, &instanceTable);
-
-    VkPhysicalDevice physicalDevice;
-    uint32_t queueFamilyIndex;
-    dokChoosePhysicalDevice(&instanceTable, &physicalDevice, &queueFamilyIndex);
-
-    VkDevice device;
-    dokCreateVkDevice(&instanceTable, physicalDevice, queueFamilyIndex, &device);
-    
-    DokDeviceTable deviceTable = { 0 };
-    dokLoadDeviceTable(instanceTable.vkGetDeviceProcAddr, device, &deviceTable);
-
-    VkQueue queue;
-    deviceTable.vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
-
-    DokWindowCreateInfo windowInfo = { 0 };
-    windowInfo.pTitle = "PEPE";
-    windowInfo.height = 420;
-    windowInfo.width = 720;
-
-    DokWindow window;
-    dokCreateWindow(&windowInfo, &window);
-
-    VkSurfaceKHR surface;
-    dokCreateWindowSurface(&instanceTable, window, &surface);
-
-    VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    instanceTable.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
-
-    VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
-    if (swapchainExtent.width == 0xFFFFFFFF) {
-        dokGetWindowExtent(window, &swapchainExtent);
-    }
-
+VkResult dokCreateVkPipeline(DokDeviceTable* deviceTable, VkPipeline* pOut) {
     VkFormat imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
-
-    VkSwapchainCreateInfoKHR swapchainInfo = { 0 };
-    swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchainInfo.surface = surface;
-    swapchainInfo.minImageCount = surfaceCapabilities.minImageCount,
-    swapchainInfo.imageFormat = imageFormat;
-    swapchainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-    swapchainInfo.imageExtent = swapchainExtent;
-    swapchainInfo.imageArrayLayers = 1;
-    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchainInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;;
-
-    VkSwapchainKHR swapchain;
-    deviceTable.vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain);
-
-    uint32_t imageCount;
-    deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, NULL);
-
-    VkImage* images = (VkImage*) malloc(imageCount * sizeof(VkImage));
-    deviceTable.vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images);
-
-    VkImageView* imageViews = (VkImageView*) malloc(imageCount * sizeof(VkImageView));
-        
-    VkImageSubresourceRange subresourceRange = { 0 };
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresourceRange.levelCount = 1;
-    subresourceRange.layerCount = 1;
-
-    for (uint32_t i = 0; i < imageCount; i++) {
-        VkImageViewCreateInfo viewInfo = { 0 };
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = images[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = imageFormat;
-        viewInfo.subresourceRange = subresourceRange;
-
-        deviceTable.vkCreateImageView(device, &viewInfo, NULL, &imageViews[i]);
-    }
 
     VkPipelineRenderingCreateInfo renderingInfo = { 0 };
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -218,7 +140,7 @@ int main() {
     shaderInfo.pCode = (uint32_t*)spirvShader;
 
     VkShaderModule shaderModule;
-    deviceTable.vkCreateShaderModule(device, &shaderInfo, NULL, &shaderModule);
+    deviceTable->vkCreateShaderModule(deviceTable->device, &shaderInfo, NULL, &shaderModule);
 
     VkPipelineShaderStageCreateInfo vertexInfo = { 0 };
     vertexInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -273,7 +195,7 @@ int main() {
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     
     VkPipelineLayout pipelineLayout;
-    deviceTable.vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout);
+    deviceTable->vkCreatePipelineLayout(deviceTable->device, &pipelineLayoutInfo, NULL, &pipelineLayout);
 
     VkGraphicsPipelineCreateInfo pipelineInfo = { 0 };
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -289,8 +211,140 @@ int main() {
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipelineLayout;
 
+    return deviceTable->vkCreateGraphicsPipelines(deviceTable->device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, pOut);
+}
+
+void dokVkTransitionImageLayout(
+    DokDeviceTable* deviceTable, VkCommandBuffer commandBuffer, VkImage image,
+    VkImageLayout oldLayout,
+    VkImageLayout newLayout,
+    VkAccessFlags2 srcAccessMask,
+    VkAccessFlags2 dstAccessMask,
+    VkPipelineStageFlags2 srcStageMask,
+    VkPipelineStageFlags2 dstStageMask) {
+
+    VkImageSubresourceRange subresourceRange = { 0 };
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+
+    VkImageMemoryBarrier2 barrier = { 0 };
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = srcStageMask;
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.dstStageMask = dstStageMask;
+    barrier.dstAccessMask = dstAccessMask;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.image = image;
+    barrier.subresourceRange = subresourceRange;
+
+    VkDependencyInfo dependencyInfo = { 0 };
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &barrier;
+
+    deviceTable->vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+}
+
+void dokCreateDevice(DokInstanceTable* instanceTable, DokDevice* pOut) {
+    dokChoosePhysicalDevice(instanceTable, &pOut->physicalDevice, &pOut->queueFamilyIndex);
+    dokCreateVkDevice(instanceTable, pOut->physicalDevice, pOut->queueFamilyIndex, &pOut->device);
+    dokLoadDeviceTable(instanceTable->vkGetDeviceProcAddr, pOut->device, &pOut->deviceTable);
+}
+
+int main() {
+
+    DokVkLoader loader;
+    dokLoadVulkan(&loader);
+
+    PFN_vkGetInstanceProcAddr instanceProcAddr = (PFN_vkGetInstanceProcAddr) dokGetFunction(loader, "vkGetInstanceProcAddr");
+
+    DokGlobalTable globalTable = { 0 };
+    dokLoadGlobalTable(instanceProcAddr, &globalTable);
+
+    VkInstance instance;
+    dokCreateVkInstance(&globalTable, &instance);
+
+    DokInstanceTable instanceTable = { 0 };
+    dokLoadInstanceTable(instanceProcAddr, instance, &instanceTable);
+
+    VkPhysicalDevice physicalDevice;
+    uint32_t queueFamilyIndex;
+    dokChoosePhysicalDevice(&instanceTable, &physicalDevice, &queueFamilyIndex);
+
+    VkDevice device;
+    dokCreateVkDevice(&instanceTable, physicalDevice, queueFamilyIndex, &device);
+    
+    DokDeviceTable deviceTable = { 0 };
+    dokLoadDeviceTable(instanceTable.vkGetDeviceProcAddr, device, &deviceTable);
+
+    VkQueue queue;
+    deviceTable.vkGetDeviceQueue(deviceTable.device, queueFamilyIndex, 0, &queue);
+
+    DokWindowCreateInfo windowInfo = { 0 };
+    windowInfo.pTitle = "PEPE";
+    windowInfo.height = 420;
+    windowInfo.width = 720;
+
+    DokWindow window;
+    dokCreateWindow(&windowInfo, &window);
+
+    VkSurfaceKHR surface;
+    dokCreateWindowSurface(&instanceTable, window, &surface);
+
+    VkSurfaceCapabilitiesKHR surfaceCapabilities;
+    instanceTable.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+
+    VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
+    if (swapchainExtent.width == 0xFFFFFFFF) {
+        dokGetWindowExtent(window, &swapchainExtent);
+    }
+
+    VkFormat imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
+
+    VkSwapchainCreateInfoKHR swapchainInfo = { 0 };
+    swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchainInfo.surface = surface;
+    swapchainInfo.minImageCount = surfaceCapabilities.minImageCount,
+    swapchainInfo.imageFormat = imageFormat;
+    swapchainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+    swapchainInfo.imageExtent = swapchainExtent;
+    swapchainInfo.imageArrayLayers = 1;
+    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchainInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;;
+
+    VkSwapchainKHR swapchain;
+    deviceTable.vkCreateSwapchainKHR(deviceTable.device, &swapchainInfo, NULL, &swapchain);
+
+    uint32_t imageCount;
+    deviceTable.vkGetSwapchainImagesKHR(deviceTable.device, swapchain, &imageCount, NULL);
+
+    VkImage* images = (VkImage*) malloc(imageCount * sizeof(VkImage));
+    deviceTable.vkGetSwapchainImagesKHR(deviceTable.device, swapchain, &imageCount, images);
+
+    VkImageView* imageViews = (VkImageView*) malloc(imageCount * sizeof(VkImageView));
+        
+    VkImageSubresourceRange subresourceRange = { 0 };
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+
+    for (uint32_t i = 0; i < imageCount; i++) {
+        VkImageViewCreateInfo viewInfo = { 0 };
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = images[i];
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = imageFormat;
+        viewInfo.subresourceRange = subresourceRange;
+
+        deviceTable.vkCreateImageView(deviceTable.device, &viewInfo, NULL, &imageViews[i]);
+    }
+
     VkPipeline pipeline;
-    deviceTable.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
+    dokCreateVkPipeline(&deviceTable, &pipeline);
 
     VkCommandPoolCreateInfo commandPoolInfo = { 0 };
     commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -298,16 +352,15 @@ int main() {
     commandPoolInfo.queueFamilyIndex = queueFamilyIndex;
 
     VkCommandPool commandPool;
-    deviceTable.vkCreateCommandPool(device, &commandPoolInfo, NULL, &commandPool);
-
-    VkCommandBuffer commandBuffer;
+    deviceTable.vkCreateCommandPool(deviceTable.device, &commandPoolInfo, NULL, &commandPool);
 
     VkCommandBufferAllocateInfo allocateInfo = { 0 };
     allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocateInfo.commandPool = commandPool;
     allocateInfo.commandBufferCount = 1;
 
-    deviceTable.vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer);
+    VkCommandBuffer commandBuffer;
+    deviceTable.vkAllocateCommandBuffers(deviceTable.device, &allocateInfo, &commandBuffer);
 
     VkSemaphoreCreateInfo semaphoreInfo = { 0 };
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -316,13 +369,13 @@ int main() {
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    VkFence fence;
     VkSemaphore presentCompleteSemaphore;
     VkSemaphore renderFinishedSemaphore;
+    VkFence fence;
 
-    deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &presentCompleteSemaphore);
-    deviceTable.vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
-    deviceTable.vkCreateFence(device, &fenceInfo, NULL, &fence);
+    deviceTable.vkCreateSemaphore(deviceTable.device, &semaphoreInfo, NULL, &presentCompleteSemaphore);
+    deviceTable.vkCreateSemaphore(deviceTable.device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
+    deviceTable.vkCreateFence(deviceTable.device, &fenceInfo, NULL, &fence);
 
     bool windowExists = true;
 
@@ -336,11 +389,11 @@ int main() {
     while (windowExists) {
         dokPollWindow(window);
 
-        deviceTable.vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
-        deviceTable.vkResetFences(device, 1, &fence);
+        deviceTable.vkWaitForFences(deviceTable.device, 1, &fence, VK_TRUE, UINT64_MAX);
+        deviceTable.vkResetFences(deviceTable.device, 1, &fence);
 
         uint32_t imageIndex;
-        deviceTable.vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
+        deviceTable.vkAcquireNextImageKHR(deviceTable.device, swapchain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
 
         VkCommandBufferBeginInfo beginInfo = { 0 };
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -348,33 +401,17 @@ int main() {
 
         deviceTable.vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-        VkImageSubresourceRange subresourceRange = { 0 };
-        subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subresourceRange.levelCount = 1;
-        subresourceRange.layerCount = 1;
+        dokVkTransitionImageLayout(
+            &deviceTable, commandBuffer, images[imageIndex],
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_ACCESS_2_NONE,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
+        );
 
-        VkImageMemoryBarrier2 barrier = { 0 };
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrier.srcAccessMask = VK_ACCESS_2_NONE;
-        barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrier.image = images[imageIndex];
-        barrier.subresourceRange = subresourceRange;
-
-        VkDependencyInfo dependencyInfo = { 0 };
-        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-        dependencyInfo.imageMemoryBarrierCount = 1;
-        dependencyInfo.pImageMemoryBarriers = &barrier;
-
-        deviceTable.vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
-
-        VkClearColorValue clearColor = {
-            .float32 = {0.0f, 0.0f, 0.0f, 1.0f}
-        };
-
+        VkClearColorValue clearColor = { .float32 = {0.0f, 0.0f, 0.0f, 1.0f} };
         VkClearValue clearValue = { 0 };
         clearValue.color = clearColor;
 
@@ -386,8 +423,11 @@ int main() {
         attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attachmentInfo.clearValue = clearValue;
 
+        VkExtent2D windowExtent;
+        dokGetWindowExtent(window, &windowExtent);
+
         VkRect2D renderArea = { 0 };
-        renderArea.extent = swapchainExtent;
+        renderArea.extent = windowExtent;
 
         VkRenderingInfo renderingInfo = { 0 };
         renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -399,12 +439,12 @@ int main() {
         deviceTable.vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
         VkViewport viewport = { 0 };
-        viewport.width = swapchainExtent.width;
-        viewport.height = swapchainExtent.height;
+        viewport.width = windowExtent.width;
+        viewport.height = windowExtent.height;
         viewport.maxDepth = 1.0f;
 
         VkRect2D scissors = { 0 };
-        scissors.extent = swapchainExtent;
+        scissors.extent = windowExtent;
 
         deviceTable.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         deviceTable.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -413,22 +453,15 @@ int main() {
         deviceTable.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
         deviceTable.vkCmdEndRendering(commandBuffer);
 
-        VkImageMemoryBarrier2 barrierPresent = { 0 };
-        barrierPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        barrierPresent.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrierPresent.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        barrierPresent.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-        barrierPresent.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrierPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        barrierPresent.image = images[imageIndex];
-        barrierPresent.subresourceRange = subresourceRange;
-
-        VkDependencyInfo barrierPresentDependencyInfo = { 0 };
-        barrierPresentDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-        barrierPresentDependencyInfo.imageMemoryBarrierCount = 1;
-        barrierPresentDependencyInfo.pImageMemoryBarriers = &barrierPresent;
-
-        deviceTable.vkCmdPipelineBarrier2(commandBuffer, &barrierPresentDependencyInfo);
+        dokVkTransitionImageLayout(
+            &deviceTable, commandBuffer, images[imageIndex],
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_ACCESS_2_NONE,
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
+        );
 
         deviceTable.vkEndCommandBuffer(commandBuffer);
         deviceTable.vkQueueWaitIdle(queue);
