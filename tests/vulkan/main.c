@@ -11,14 +11,16 @@ alignas(uint32_t) const uint8_t spirvShader[] = {
 
 typedef struct TestInstance_T* TestInstance;
 typedef struct TestWindow_T* TestWindow;
+typedef struct TestDevice_T* TestDevice;
+typedef struct TestContext_T* TestContext;
 
-typedef struct TestDevice {
+struct TestDevice_T {
     VkPhysicalDevice physicalDevice;
     uint32_t queueFamilyIndex;
     VkDevice device;
     VkQueue queue;
     DokDeviceTable table;
-} TestDevice;
+};
 
 struct TestInstance_T {
     DokInstanceTable table;
@@ -29,6 +31,12 @@ struct TestInstance_T {
 struct TestWindow_T {
     VkSurfaceKHR surface;
     DokWindow window;
+};
+
+struct TestContext_T {
+    TestInstance instance;
+    TestDevice device;
+    TestWindow window;
 };
 
 
@@ -275,10 +283,12 @@ void testCreateInstance(TestInstance* pOut) {
 }
 
 void testCreateDevice(TestInstance testInstance, TestDevice* pOut) {
-    testChoosePhysicalDevice(&testInstance->table, &pOut->physicalDevice, &pOut->queueFamilyIndex);
-    testCreateVkDevice(&testInstance->table, pOut->physicalDevice, pOut->queueFamilyIndex, &pOut->device);
-    dokLoadDeviceTable(testInstance->table.vkGetDeviceProcAddr, pOut->device, &pOut->table);
-    pOut->table.vkGetDeviceQueue(pOut->device, pOut->queueFamilyIndex, 0, &pOut->queue);
+    TestDevice pDevice = (TestDevice) malloc(sizeof(struct TestDevice_T));
+    testChoosePhysicalDevice(&testInstance->table, &pDevice->physicalDevice, &pDevice->queueFamilyIndex);
+    testCreateVkDevice(&testInstance->table, pDevice->physicalDevice, pDevice->queueFamilyIndex, &pDevice->device);
+    dokLoadDeviceTable(testInstance->table.vkGetDeviceProcAddr, pDevice->device, &pDevice->table);
+    pDevice->table.vkGetDeviceQueue(pDevice->device, pDevice->queueFamilyIndex, 0, &pDevice->queue);
+    *pOut = pDevice;
 }
 
 void testCreateWindow(TestInstance testInstance, TestWindow* pOut) {
@@ -293,35 +303,31 @@ void testCreateWindow(TestInstance testInstance, TestWindow* pOut) {
     *pOut = pWindow;
 }
 
-int main() {
-    TestInstance testInstance;
-    testCreateInstance(&testInstance);
+void testCreateContext
 
-    DokInstanceTable instanceTable = testInstance->table;
-    // VkInstance instance = testInstance->instance;
+int main() {
+    TestInstance instance;
+    testCreateInstance(&instance);
 
     TestDevice device;
-    testCreateDevice(testInstance, &device);
+    testCreateDevice(instance, &device);
 
-    TestWindow testWindow;
-    testCreateWindow(testInstance, &testWindow);
-
-    VkSurfaceKHR surface = testWindow->surface;
-    DokWindow window = testWindow->window;
+    TestWindow window;
+    testCreateWindow(instance, &window);
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    instanceTable.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.physicalDevice, surface, &surfaceCapabilities);
+    instance->table.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physicalDevice, window->surface, &surfaceCapabilities);
 
     VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
     if (swapchainExtent.width == 0xFFFFFFFF) {
-        dokGetWindowExtent(window, &swapchainExtent);
+        dokGetWindowExtent(window->window, &swapchainExtent);
     }
 
     VkFormat imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
 
     VkSwapchainCreateInfoKHR swapchainInfo = { 0 };
     swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchainInfo.surface = surface;
+    swapchainInfo.surface = window->surface;
     swapchainInfo.minImageCount = surfaceCapabilities.minImageCount,
     swapchainInfo.imageFormat = imageFormat;
     swapchainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
@@ -333,13 +339,13 @@ int main() {
     swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;;
 
     VkSwapchainKHR swapchain;
-    device.table.vkCreateSwapchainKHR(device.device, &swapchainInfo, NULL, &swapchain);
+    device->table.vkCreateSwapchainKHR(device->device, &swapchainInfo, NULL, &swapchain);
 
     uint32_t imageCount;
-    device.table.vkGetSwapchainImagesKHR(device.device, swapchain, &imageCount, NULL);
+    device->table.vkGetSwapchainImagesKHR(device->device, swapchain, &imageCount, NULL);
 
     VkImage* images = (VkImage*) malloc(imageCount * sizeof(VkImage));
-    device.table.vkGetSwapchainImagesKHR(device.device, swapchain, &imageCount, images);
+    device->table.vkGetSwapchainImagesKHR(device->device, swapchain, &imageCount, images);
 
     VkImageView* imageViews = (VkImageView*) malloc(imageCount * sizeof(VkImageView));
         
@@ -356,19 +362,19 @@ int main() {
         viewInfo.format = imageFormat;
         viewInfo.subresourceRange = subresourceRange;
 
-        device.table.vkCreateImageView(device.device, &viewInfo, NULL, &imageViews[i]);
+        device->table.vkCreateImageView(device->device, &viewInfo, NULL, &imageViews[i]);
     }
 
     VkPipeline pipeline;
-    testCreateVkPipeline(&device.table, &pipeline);
+    testCreateVkPipeline(&device->table, &pipeline);
 
     VkCommandPoolCreateInfo commandPoolInfo = { 0 };
     commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    commandPoolInfo.queueFamilyIndex = device.queueFamilyIndex;
+    commandPoolInfo.queueFamilyIndex = device->queueFamilyIndex;
 
     VkCommandPool commandPool;
-    device.table.vkCreateCommandPool(device.device, &commandPoolInfo, NULL, &commandPool);
+    device->table.vkCreateCommandPool(device->device, &commandPoolInfo, NULL, &commandPool);
 
     VkCommandBufferAllocateInfo allocateInfo = { 0 };
     allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -376,7 +382,7 @@ int main() {
     allocateInfo.commandBufferCount = 1;
 
     VkCommandBuffer commandBuffer;
-    device.table.vkAllocateCommandBuffers(device.device, &allocateInfo, &commandBuffer);
+    device->table.vkAllocateCommandBuffers(device->device, &allocateInfo, &commandBuffer);
 
     VkSemaphoreCreateInfo semaphoreInfo = { 0 };
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -389,9 +395,9 @@ int main() {
     VkSemaphore renderFinishedSemaphore;
     VkFence fence;
 
-    device.table.vkCreateSemaphore(device.device, &semaphoreInfo, NULL, &presentCompleteSemaphore);
-    device.table.vkCreateSemaphore(device.device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
-    device.table.vkCreateFence(device.device, &fenceInfo, NULL, &fence);
+    device->table.vkCreateSemaphore(device->device, &semaphoreInfo, NULL, &presentCompleteSemaphore);
+    device->table.vkCreateSemaphore(device->device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
+    device->table.vkCreateFence(device->device, &fenceInfo, NULL, &fence);
 
     bool windowExists = true;
 
@@ -400,25 +406,25 @@ int main() {
     destroyObserverInfo.pfnCallback = observerDestroy;
 
     DokWindowDestroyObserver destroyObserver;
-    dokCreateDestroyObserver(window, &destroyObserverInfo, &destroyObserver);
+    dokCreateDestroyObserver(window->window, &destroyObserverInfo, &destroyObserver);
 
     while (windowExists) {
-        dokPollWindow(window);
+        dokPollWindow(window->window);
 
-        device.table.vkWaitForFences(device.device, 1, &fence, VK_TRUE, UINT64_MAX);
-        device.table.vkResetFences(device.device, 1, &fence);
+        device->table.vkWaitForFences(device->device, 1, &fence, VK_TRUE, UINT64_MAX);
+        device->table.vkResetFences(device->device, 1, &fence);
 
         uint32_t imageIndex;
-        device.table.vkAcquireNextImageKHR(device.device, swapchain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
+        device->table.vkAcquireNextImageKHR(device->device, swapchain, UINT64_MAX, presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
 
         VkCommandBufferBeginInfo beginInfo = { 0 };
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        device.table.vkBeginCommandBuffer(commandBuffer, &beginInfo);
+        device->table.vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
         testTransitionImageLayout(
-            &device.table, commandBuffer, images[imageIndex],
+            &device->table, commandBuffer, images[imageIndex],
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_ACCESS_2_NONE,
@@ -440,7 +446,7 @@ int main() {
         attachmentInfo.clearValue = clearValue;
 
         VkExtent2D windowExtent;
-        dokGetWindowExtent(window, &windowExtent);
+        dokGetWindowExtent(window->window, &windowExtent);
 
         VkRect2D renderArea = { 0 };
         renderArea.extent = windowExtent;
@@ -452,7 +458,7 @@ int main() {
         renderingInfo.colorAttachmentCount = 1;
         renderingInfo.pColorAttachments = &attachmentInfo;
 
-        device.table.vkCmdBeginRendering(commandBuffer, &renderingInfo);
+        device->table.vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
         VkViewport viewport = { 0 };
         viewport.width = windowExtent.width;
@@ -462,15 +468,15 @@ int main() {
         VkRect2D scissors = { 0 };
         scissors.extent = windowExtent;
 
-        device.table.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        device.table.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-        device.table.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
+        device->table.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        device->table.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        device->table.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
 
-        device.table.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-        device.table.vkCmdEndRendering(commandBuffer);
+        device->table.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        device->table.vkCmdEndRendering(commandBuffer);
 
         testTransitionImageLayout(
-            &device.table, commandBuffer, images[imageIndex],
+            &device->table, commandBuffer, images[imageIndex],
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -479,8 +485,8 @@ int main() {
             VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
         );
 
-        device.table.vkEndCommandBuffer(commandBuffer);
-        device.table.vkQueueWaitIdle(device.queue);
+        device->table.vkEndCommandBuffer(commandBuffer);
+        device->table.vkQueueWaitIdle(device->queue);
 
         VkSemaphoreSubmitInfo waitSemaphoreInfo = { 0 };
         waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -505,7 +511,7 @@ int main() {
         submitInfo.signalSemaphoreInfoCount = 1;
         submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
 
-        device.table.vkQueueSubmit2(device.queue, 1, &submitInfo, fence);
+        device->table.vkQueueSubmit2(device->queue, 1, &submitInfo, fence);
 
         VkPresentInfoKHR presentInfo = { 0 };
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -515,10 +521,10 @@ int main() {
         presentInfo.pSwapchains = &swapchain;
         presentInfo.pImageIndices = &imageIndex;
 
-        device.table.vkQueuePresentKHR(device.queue, &presentInfo);
+        device->table.vkQueuePresentKHR(device->queue, &presentInfo);
     }
 
     // dokUnloadVulkan(loader);
-    dokFreeWindow(window);
+    dokFreeWindow(window->window);
     return 0;
 }
