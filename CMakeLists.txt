@@ -10,7 +10,6 @@ add_library (dok STATIC
 	"include/dok/dok_vulkan_tables.h"
 	"include/dok/dok_core.h"
 	"include/dok/dok_vector.h"
-	src/dok_vulkan_tables.c
 )
 add_library (dok::dok ALIAS dok)
 

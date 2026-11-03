@@ -2,8 +2,6 @@
 #include <dok/dok_vector.h>
 #include <dok/dok_core.h>
 #include <windows.h>
-#include <stdbool.h>
-#include <stdio.h>
 
 const char* CLASS_NAME = "Dok Window";
 const char* PROP_KEY = "Dok";
@@ -153,9 +151,9 @@ const char* dokGetPlatformSurfaceExtension() {
     return VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
 }
 
-VkBool32 dokGetPhysicalDevicePresentationSupport(DokInstanceTable* instanceTable, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) {
+VkBool32 dokGetPhysicalDevicePresentationSupport(PFN_vkGetInstanceProcAddr instanceProcAddr, VkInstance instance, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) {
     PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR presentationSupport = (PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR)
-        instanceTable->vkGetInstanceProcAddr(instanceTable->instance, "vkGetPhysicalDeviceWin32PresentationSupportKHR");
+        instanceProcAddr(instance, "vkGetPhysicalDeviceWin32PresentationSupportKHR");
 
     if (!presentationSupport) {
         return VK_FALSE;
@@ -164,20 +162,20 @@ VkBool32 dokGetPhysicalDevicePresentationSupport(DokInstanceTable* instanceTable
     return presentationSupport(physicalDevice, queueFamilyIndex);
 }
 
-VkResult dokCreateWindowSurface(DokInstanceTable* instanceTable, DokWindow window, VkSurfaceKHR* pSurface) {
+VkResult dokCreateWindowSurface(PFN_vkGetInstanceProcAddr instanceProcAddr, VkInstance instance, DokWindow window, VkSurfaceKHR* pSurface) {
     VkWin32SurfaceCreateInfoKHR info = { 0 };
     info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     info.hinstance = window->hinstance;
     info.hwnd = window->hwnd;
 
     PFN_vkCreateWin32SurfaceKHR createSurface = (PFN_vkCreateWin32SurfaceKHR) 
-        instanceTable->vkGetInstanceProcAddr(instanceTable->instance, "vkCreateWin32SurfaceKHR");
+        instanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
 
     if (!createSurface) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    return createSurface(instanceTable->instance, &info, NULL, pSurface);
+    return createSurface(instance, &info, NULL, pSurface);
 }
 
 DokResult dokGetWindowExtent(DokWindow window, VkExtent2D* pOut) {

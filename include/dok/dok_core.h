@@ -1,6 +1,6 @@
 #pragma once
 
-#include <dok/dok_vulkan_tables.h>
+#include <vulkan/vulkan.h>
 
 typedef struct DokWindowDestroyObserver_T* DokWindowDestroyObserver;
 typedef struct DokWindowResizeObserver_T* DokWindowResizeObserver;
@@ -55,14 +55,16 @@ DokResult dokCreateWindow(
 const char* dokGetPlatformSurfaceExtension();
 
 VkBool32 dokGetPhysicalDevicePresentationSupport(
-    DokInstanceTable*   instanceTable,
-    VkPhysicalDevice    physicalDevice,
-    uint32_t            queueFamilyIndex);
+    PFN_vkGetInstanceProcAddr   instanceProcAddr, 
+    VkInstance                  instance,
+    VkPhysicalDevice            physicalDevice,
+    uint32_t                    queueFamilyIndex);
 
 VkResult dokCreateWindowSurface(
-    DokInstanceTable*   instanceTable,
-    DokWindow           window,
-    VkSurfaceKHR*       pSurface);
+    PFN_vkGetInstanceProcAddr   instanceProcAddr, 
+    VkInstance                  instance,
+    DokWindow                   window,
+    VkSurfaceKHR*               pSurface);
 
 DokResult dokGetWindowExtent(
     DokWindow   window,
