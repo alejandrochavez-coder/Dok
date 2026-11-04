@@ -1,9 +1,9 @@
 #include <dok/dok_core.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 void observerCallback(DokWindow window, void* pUserData) {
-    printf("PEPE");
     *((bool*)pUserData) = false;
 }
 
@@ -35,8 +35,25 @@ int main() {
 
     DokWindowResizeObserver resizeObserver;
     dokCreateResizeObserver(window, &resizeInfo, &resizeObserver);
+    
+    uint64_t timeFrequency;
+    uint64_t time;
+    dokGetTimeFrequency(&timeFrequency);
+    dokGetTime(&time);
+
+    double scale = 1.0 / timeFrequency;
+    double elapsedTime = 0;
 
     while (exists) {
+
+        uint64_t oldTime = time;
+        dokGetTime(&time);
+
+        double deltaTime = (time - oldTime) * scale;
+        elapsedTime += deltaTime;
+
+        printf("%f\n" , elapsedTime);
+
         dokPollWindow(window);
     }
 

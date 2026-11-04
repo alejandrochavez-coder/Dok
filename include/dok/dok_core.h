@@ -42,6 +42,10 @@ typedef struct DokWindowCreateInfo {
     uint32_t            width;
 } DokWindowCreateInfo;
 
+void dokGetTime(uint64_t* pOut);
+
+void dokGetTimeFrequency(uint64_t* pOut);
+
 DokResult dokLoadVulkan(DokVkLoader* pOut);
 
 PFN_vkVoidFunction dokGetFunction(DokVkLoader loader, const char* name);

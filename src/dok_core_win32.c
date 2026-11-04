@@ -29,6 +29,14 @@ struct DokVkLoader_T {
     HMODULE dll;
 };
 
+void dokGetTime(uint64_t* pOut) {
+    QueryPerformanceCounter((LARGE_INTEGER*) pOut);
+}
+
+void dokGetTimeFrequency(uint64_t* pOut) {
+    QueryPerformanceFrequency((LARGE_INTEGER*) pOut);
+}
+
 DokResult dokLoadVulkan(DokVkLoader* pOut) {
     HMODULE dll = LoadLibrary("vulkan-1.dll");
     if (!dll) {
