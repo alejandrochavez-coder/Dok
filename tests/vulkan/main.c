@@ -4,6 +4,7 @@
 #include <dok/dok_core.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdbool.h>
 
 alignas(uint32_t) const uint8_t spirvShader[] = {
@@ -61,7 +62,7 @@ struct TestContext_T {
     VkPipeline pipeline;
     uint32_t frameIndex;
     uint32_t framesInFlight;
-    VkBuffer buffer;
+    VkBuffer vertexBuffer;
 };
 
 typedef struct Vector2 {
@@ -84,11 +85,11 @@ Vertex vertices[] = {
     (Vertex){
         .position = (Vector2){
             .x = 0.0f,
-            .y = -0.5f
+            .y = -0.1f
         },
         .color = (Vector3){
             .x = 1.0f,
-            .y = 0.0f,
+            .y = 0.5f,
             .z = 0.0f
         }
     },
@@ -362,6 +363,80 @@ void testCreateDevice(TestPhysicalDevice physicalDevice, DokWindow window, VkFor
     *pOut = pDevice;
 }
 
+void testCreateBuffer(
+    TestDevice              device, 
+    VkBufferUsageFlags      usage,
+    VkDeviceSize            size,
+    VkMemoryPropertyFlags   properties, 
+    VkBuffer*               pOutBuffer, 
+    VkDeviceMemory*         pOutMemory) {
+
+    VkBufferCreateInfo bufferInfo = { 0 };
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkBuffer buffer;
+    device->table.vkCreateBuffer(device->handle, &bufferInfo, NULL, &buffer);
+
+    VkMemoryRequirements memoryRequirements;
+    device->table.vkGetBufferMemoryRequirements(device->handle, buffer, &memoryRequirements);
+
+    VkPhysicalDeviceMemoryProperties memoryProperties;
+    device->physicalDevice->instance->table.vkGetPhysicalDeviceMemoryProperties(device->physicalDevice->handle, &memoryProperties);
+
+    VkMemoryAllocateInfo memoryAllocateInfo = { 0 };
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.allocationSize = memoryRequirements.size;
+
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
+        if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties)) {
+            memoryAllocateInfo.memoryTypeIndex = i;
+            break;
+        }
+    }
+
+    VkDeviceMemory memory;
+
+    device->table.vkAllocateMemory(device->handle, &memoryAllocateInfo, NULL, &memory);
+    device->table.vkBindBufferMemory(device->handle, buffer, memory, 0);
+
+    *pOutBuffer = buffer;
+    *pOutMemory = memory;
+   
+}
+
+void copyBuffer(
+    TestContext context,
+    VkBuffer srcBuffer, 
+    VkBuffer dstBuffer, 
+    VkDeviceSize size) {
+
+    VkCommandBufferAllocateInfo allocateInfo = { 0 };
+    allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocateInfo.commandPool = context->commandPool;
+    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateInfo.commandBufferCount = 1;
+
+    TestDevice device = context->device;
+
+    VkCommandBuffer copyCommandBuffer;
+    device->table.vkAllocateCommandBuffers(device->handle, &allocateInfo, &copyCommandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo = { 0 };
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    VkBufferCopy bufferCopy = { 0 };
+    bufferCopy.size = size;
+
+    device->table.vkBeginCommandBuffer(copyCommandBuffer, &beginInfo);
+    device->table.vkCmdCopyBuffer(copyCommandBuffer, srcBuffer, dstBuffer, 1, &bufferCopy);
+
+    device->table.vkEndCommandBuffer(copyCommandBuffer);
+}
+
 void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* pOut) {
     TestContext pContext = (TestContext) malloc(sizeof(struct TestContext_T));
     dokCreateVectorWithSize(VkSemaphore, &pContext->imageAcquiredSemaphores, framesInFlight);
@@ -453,38 +528,34 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     vertexInputState.vertexAttributeDescriptionCount = sizeof(attributeDescriptors) / sizeof(attributeDescriptors[0]);
     vertexInputState.pVertexAttributeDescriptions = attributeDescriptors;
 
-    VkBufferCreateInfo bufferInfo = { 0 };
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = sizeof(vertices);
-    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkDeviceSize bufferSize = sizeof(vertices);
 
-    device->table.vkCreateBuffer(device->handle, &bufferInfo, NULL, &pContext->buffer);
+    VkDeviceMemory stagingBufferMemory;
+    VkBuffer stagingBuffer;
 
-    VkMemoryRequirements memoryRequirements;
-    device->table.vkGetBufferMemoryRequirements(device->handle, pContext->buffer, &memoryRequirements);
+    testCreateBuffer(
+        device,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        bufferSize,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &stagingBuffer,
+        &stagingBufferMemory
+    );
 
-    VkPhysicalDeviceMemoryProperties memoryProperties;
-    device->physicalDevice->instance->table.vkGetPhysicalDeviceMemoryProperties(device->physicalDevice->handle, &memoryProperties);
+    void* data;
+    device->table.vkMapMemory(device->handle, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, vertices, bufferSize);
+    device->table.vkUnmapMemory(device->handle, stagingBufferMemory);
 
-    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    uint32_t memoryTypeIndex;
+    testCreateBuffer(
+        device, 
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+        bufferSize,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &pContext->vertexBuffer,
+        &pContext->deviceMemory
+    );
 
-    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
-        if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties)) {
-            memoryTypeIndex = i;
-            break;
-        }
-    }
-
-    VkMemoryAllocateInfo memoryAllocateInfo = { 0 };
-    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocateInfo.allocationSize = memoryRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex;
-
-    device->table.vkAllocateMemory(device->handle, &memoryAllocateInfo, NULL, &pContext->deviceMemory);
-    device->table.vkBindBufferMemory(device->handle, pContext->buffer, pContext->deviceMemory, 0);
-    
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = { 0 };
     inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -639,10 +710,14 @@ void testContextProcess(TestContext context) {
     scissors.extent = windowExtent;
 
     device->table.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipeline);
+    
+    VkDeviceSize offset = { 0 };
+    device->table.vkCmdBindVertexBuffers(commandBuffer, 0, 1, &context->vertexBuffer    , &offset);
+    
     device->table.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
     device->table.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
 
-    device->table.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    device->table.vkCmdDraw(commandBuffer, sizeof(vertices) / sizeof(vertices[0]), 1, 0, 0);
     device->table.vkCmdEndRendering(commandBuffer);
 
     testTransitionImageLayout(
@@ -746,7 +821,6 @@ int main() {
         testContextProcess(context);
         dokPollWindow(window);
 
-        printf("RESIZING");
         device->table.vkDeviceWaitIdle(device->handle);
         testUpdateSwapchain(device, VK_PRESENT_MODE_FIFO_KHR);
     }
