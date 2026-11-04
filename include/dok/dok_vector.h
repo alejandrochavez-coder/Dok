@@ -17,6 +17,13 @@ typedef struct DokVector {
         (pOut)->length = 0;\
     } while(0)
 
+#define dokCreateVectorWithSize(T, pOut, size)\
+    do {\
+        (pOut)->data = malloc(size * sizeof(T));\
+        (pOut)->capacity = size;\
+        (pOut)->length = size;\
+    } while(0)
+
 #define dokVectorReserve(T, additional, vector)\
     do {\
         size_t neededCapacity = vector.length + additional;\
@@ -35,11 +42,32 @@ typedef struct DokVector {
         }\
     } while(0)
 
+#define dokVectorResize(T, newLength, vector)\
+    do {\
+        if (vector.length == newLength) {\
+            break;\
+        }\
+        void* realocated = realloc(vector.data, sizeof(T) * newLength);\
+        if (realocated) {\
+            vector.data = realocated;\
+            vector.capacity = newLength;\
+            vector.length = newLength;\
+        }\
+    } while(0)
+
+
 #define dokVectorPush(T, vector, value) \
     do {\
         dokVectorReserve(T, 1, vector);\
         dokVectorCast(T, vector.data)[vector.length++] = value;\
     } while(0)
+
+#define dokVectorClear(vector) \
+    do {\
+        vector.length = 0;\
+    } while(0)
+
+#define dokVectorEmpty(vector) vector.length == 0
 
 #define dokVectorPop(vector) \
     do {\
