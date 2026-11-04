@@ -56,10 +56,64 @@ struct TestContext_T {
     DokVector commandBuffers;
     DokVector fences;
 
+    VkDeviceMemory deviceMemory;
     VkCommandPool commandPool;
     VkPipeline pipeline;
     uint32_t frameIndex;
     uint32_t framesInFlight;
+    VkBuffer buffer;
+};
+
+typedef struct Vector2 {
+    float x;
+    float y;
+} Vector2;
+
+typedef struct Vector3 {
+    float x;
+    float y;
+    float z;
+} Vector3;
+
+typedef struct Vertex {
+    Vector2 position;
+    Vector3 color;
+} Vertex;
+
+Vertex vertices[] = {
+    (Vertex){
+        .position = (Vector2){
+            .x = 0.0f,
+            .y = -0.5f
+        },
+        .color = (Vector3){
+            .x = 1.0f,
+            .y = 0.0f,
+            .z = 0.0f
+        }
+    },
+    (Vertex){
+        .position = (Vector2){
+            .x = 0.5f,
+            .y = 0.5f
+        },
+        .color = (Vector3){
+            .x = 0.0f,
+            .y = 1.0f,
+            .z = 0.0f
+        }
+    },
+    (Vertex){
+        .position = (Vector2){
+            .x = -0.5f,
+            .y = 0.5f
+        },
+        .color = (Vector3){
+            .x = 0.0f,
+            .y = 0.0f,
+            .z = 1.0f
+        }
+    }
 };
 
 void testUpdateSwapchain(TestDevice device, VkPresentModeKHR presentMode) {
@@ -377,8 +431,59 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     dynamicState.dynamicStateCount = sizeof(dynamicStates) / sizeof(dynamicStates[0]);
     dynamicState.pDynamicStates = dynamicStates;
 
+    VkVertexInputBindingDescription bindingDescriptor = { 0 };
+    bindingDescriptor.stride = sizeof(Vertex);
+    bindingDescriptor.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription firstAttribute = { 0 };
+    firstAttribute.format = VK_FORMAT_R32G32_SFLOAT;
+    firstAttribute.offset = offsetof(Vertex, position);
+
+    VkVertexInputAttributeDescription secondAttribute = { 0 };
+    secondAttribute.location = 1;
+    secondAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
+    secondAttribute.offset = offsetof(Vertex, color);
+
+    VkVertexInputAttributeDescription attributeDescriptors[] = { firstAttribute, secondAttribute };
+
     VkPipelineVertexInputStateCreateInfo vertexInputState = { 0 };
     vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputState.vertexBindingDescriptionCount = 1;
+    vertexInputState.pVertexBindingDescriptions = &bindingDescriptor;
+    vertexInputState.vertexAttributeDescriptionCount = sizeof(attributeDescriptors) / sizeof(attributeDescriptors[0]);
+    vertexInputState.pVertexAttributeDescriptions = attributeDescriptors;
+
+    VkBufferCreateInfo bufferInfo = { 0 };
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(vertices);
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    device->table.vkCreateBuffer(device->handle, &bufferInfo, NULL, &pContext->buffer);
+
+    VkMemoryRequirements memoryRequirements;
+    device->table.vkGetBufferMemoryRequirements(device->handle, pContext->buffer, &memoryRequirements);
+
+    VkPhysicalDeviceMemoryProperties memoryProperties;
+    device->physicalDevice->instance->table.vkGetPhysicalDeviceMemoryProperties(device->physicalDevice->handle, &memoryProperties);
+
+    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    uint32_t memoryTypeIndex;
+
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
+        if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties)) {
+            memoryTypeIndex = i;
+            break;
+        }
+    }
+
+    VkMemoryAllocateInfo memoryAllocateInfo = { 0 };
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.allocationSize = memoryRequirements.size;
+    memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex;
+
+    device->table.vkAllocateMemory(device->handle, &memoryAllocateInfo, NULL, &pContext->deviceMemory);
+    device->table.vkBindBufferMemory(device->handle, pContext->buffer, pContext->deviceMemory, 0);
     
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = { 0 };
     inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -462,12 +567,9 @@ void testTransitionImageLayout(
     deviceTable->vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 }
 
-
-
 void testContextProcess(TestContext context) {
     TestDevice device = context->device;
     uint32_t frameIndex = context->frameIndex;
-
 
     VkFence fence = dokVectorCast(VkFence, context->fences.data)[frameIndex];
     device->table.vkWaitForFences(device->handle, 1, &fence, VK_TRUE, UINT64_MAX);
@@ -638,11 +740,15 @@ int main() {
     resizeObserverInfo.pUserData = &device;
 
     DokWindowResizeObserver resizeObserver;
-    dokCreateResizeObserver(window, &resizeObserverInfo, &resizeObserver);
+    // dokCreateResizeObserver(window, &resizeObserverInfo, &resizeObserver);
 
     while (windowExists) {
         testContextProcess(context);
         dokPollWindow(window);
+
+        printf("RESIZING");
+        device->table.vkDeviceWaitIdle(device->handle);
+        testUpdateSwapchain(device, VK_PRESENT_MODE_FIFO_KHR);
     }
 
     return 0;
