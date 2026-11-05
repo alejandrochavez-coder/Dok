@@ -7,14 +7,9 @@
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
-#include <cglm/cglm.h>
 
 alignas(uint32_t) const uint8_t spirvShader[] = {
     #embed "demo.spv"
-};
-
-const uint8_t image_data[] = {
-    #embed "test_image.jpg"
 };
 
 typedef struct TestPhysicalDevice_T* TestPhysicalDevice;
@@ -70,11 +65,7 @@ struct TestContext_T {
     VkBuffer vertexBuffer;
 
     VkDescriptorSetLayout descriptorSetLayout;
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSet* descriptorSets;
-
     VkCommandPool commandPool;
-    VkPipelineLayout pipelineLayout;
     VkPipeline pipeline;
     uint32_t frameIndex;
     uint32_t framesInFlight;
@@ -82,43 +73,140 @@ struct TestContext_T {
     DokVector uniformBuffers;
     DokVector uniformBuffersMemory;
     DokVector uniformBuffersMapped;
-
-    double elapsedTime;
 };
 
+typedef float Vector2[2];
+typedef float Vector3[3];
+typedef float Vector4[4];
+
+typedef Vector4 Matrix4[4];
+
 typedef struct Vertex {
-    vec2 position;
-    vec3 color;
+    Vector2 position;
+    Vector3 color;
 } Vertex;
 
 Vertex vertices[] = {
     (Vertex){
-        .position = (vec2){ -0.5f, -0.5f },
-        .color = (vec3){ 1.0f, 0.5f, 0.0f }
+        .position = (float[]){ -0.5f, -0.5f },
+        .color = (float[]){ 1.0f, 0.5f, 0.0f }
     },
     (Vertex){
-        .position = (vec2){ 0.5f, -0.5f },
-        .color = (vec3){ 0.0f, 1.0f, 0.0f }
+        .position = (float[]){ 0.5f, -0.5f },
+        .color = (float[]){ 0.0f, 1.0f, 0.0f }
     },
     (Vertex){
-        .position = (vec2){ 0.5f, 0.5f },
-        .color = (vec3){ 0.0f, 0.0f, 1.0f }
+        .position = (float[]){ 0.5f, 0.5f },
+        .color = (float[]){ 0.0f, 0.0f, 1.0f }
     },
     (Vertex){
-        .position = (vec2){ -0.5f, 0.5f },
-        .color = (vec3){ 0.0f, 0.0f, 1.0f }
+        .position = (float[]){ -0.5f, 0.5f },
+        .color = (float[]){ 0.0f, 0.0f, 1.0f }
     }
 };
 
 typedef struct UniformBufferObject {
-    mat4 model;
-    mat4 view;
-    mat4 projection;
+    Vector4 model;
+    Vector4 view;
+    Vector4 projection;
 } UniformBufferObject;
 
 uint16_t indices[] = {
     0, 1, 2, 2, 3, 0
 };
+
+static inline float testVector3Dot(Vector3 a, Vector3 b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+static inline float testVector3LengthSquared(Vector3 v) {
+    return testVector3Dot(v, v);
+}
+
+static inline float testVector3Length(Vector3 v) {
+    return sqrtf(testVector3LengthSquared(v));
+}
+
+static inline void testVector3Zero(Vector3 out) {
+    out[0] = out[1] = out[2] = 0.0f;
+}
+
+static inline void testVector3Scale(Vector3 v, float s, Vector3 out) {
+    out[0] = v[0] * s;
+    out[1] = v[1] * s;
+    out[2] = v[2] * s;
+}
+
+static inline void testVector3Normalize(Vector3 v, Vector3 out) {
+    float length = testVector3Length(v);
+
+    if (length < 10000 * 10000) {
+        testVector3Zero(out);
+        return;
+    }
+
+    testVector3Scale(v, 1.0f / length, out);
+}
+
+static inline void testMulRot(Matrix4 m1, Matrix4 m2, Matrix4 dest) {
+    float a00 = m1[0][0], a01 = m1[0][1], a02 = m1[0][2], a03 = m1[0][3],
+            a10 = m1[1][0], a11 = m1[1][1], a12 = m1[1][2], a13 = m1[1][3],
+            a20 = m1[2][0], a21 = m1[2][1], a22 = m1[2][2], a23 = m1[2][3],
+            a30 = m1[3][0], a31 = m1[3][1], a32 = m1[3][2], a33 = m1[3][3],
+
+            b00 = m2[0][0], b01 = m2[0][1], b02 = m2[0][2],
+            b10 = m2[1][0], b11 = m2[1][1], b12 = m2[1][2],
+            b20 = m2[2][0], b21 = m2[2][1], b22 = m2[2][2];
+
+    dest[0][0] = a00 * b00 + a10 * b01 + a20 * b02;
+    dest[0][1] = a01 * b00 + a11 * b01 + a21 * b02;
+    dest[0][2] = a02 * b00 + a12 * b01 + a22 * b02;
+    dest[0][3] = a03 * b00 + a13 * b01 + a23 * b02;
+
+    dest[1][0] = a00 * b10 + a10 * b11 + a20 * b12;
+    dest[1][1] = a01 * b10 + a11 * b11 + a21 * b12;
+    dest[1][2] = a02 * b10 + a12 * b11 + a22 * b12;
+    dest[1][3] = a03 * b10 + a13 * b11 + a23 * b12;
+
+    dest[2][0] = a00 * b20 + a10 * b21 + a20 * b22;
+    dest[2][1] = a01 * b20 + a11 * b21 + a21 * b22;
+    dest[2][2] = a02 * b20 + a12 * b21 + a22 * b22;
+    dest[2][3] = a03 * b20 + a13 * b21 + a23 * b22;
+
+    dest[3][0] = a30;
+    dest[3][1] = a31;
+    dest[3][2] = a32;
+    dest[3][3] = a33;
+}
+
+static inline void testMakeRotation(Matrix4 m, float angle, Vector3 axis) {
+    float c = cosf(angle);
+
+    Vector3 axis_normalized;
+    Vector3 vs;
+    Vector3 v;
+
+    testVector3Normalize(axis, axis_normalized);
+    testVector3Scale(axis_normalized, 1.0f - c, v);
+    testVector3Scale(axis_normalized, sinf(angle), vs);
+
+    testVector3Scale(axis_normalized, v[0], m[0]);
+    testVector3Scale(axis_normalized, v[1], m[1]);
+    testVector3Scale(axis_normalized, v[2], m[2]);
+
+    m[0][0] += c;       m[1][0] -= vs[2];   m[2][0] += vs[1];
+    m[0][1] += vs[2];   m[1][1] += c;       m[2][1] -= vs[0];
+    m[0][2] -= vs[1];   m[1][2] += vs[0];   m[2][2] += c;
+
+    m[0][3] = m[1][3] = m[2][3] = m[3][0] = m[3][1] = m[3][2] = 0.0f;
+    m[3][3] = 1.0f;
+}
+
+static inline void testRotate(Matrix4 m, float angle, Vector3 axis) {
+    Matrix4 rot;
+    testMakeRotation(rot, angle, axis);
+    testMulRot(m, rot, m);
+}
 
 void testUpdateSwapchain(TestDevice device, VkPresentModeKHR presentMode) {
     TestPhysicalDevice physicalDevice = device->physicalDevice;
@@ -532,7 +620,6 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     dokCreateVectorWithSize(VkBuffer, &pContext->uniformBuffers, framesInFlight);
     dokCreateVectorWithSize(VkDeviceMemory, &pContext->uniformBuffersMemory, framesInFlight);
     dokCreateVectorWithSize(void*, &pContext->uniformBuffersMapped, framesInFlight);
-    pContext->elapsedTime = 0;
 
     pContext->device = device;
     pContext->frameIndex = 0;
@@ -560,60 +647,6 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
 
         void* data;
         device->table.vkMapMemory(device->handle, dokVectorCast(VkDeviceMemory, pContext->uniformBuffersMemory.data)[i], 0, bufferSize, 0, &data);
-        dokVectorCast(void*, pContext->uniformBuffersMapped.data)[i] = data;
-    }
-
-    VkDescriptorSetLayoutBinding uboLayoutBinding = { 0 };
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutCreateInfo uboLayoutInfo = { 0 };
-    uboLayoutInfo.bindingCount = 1;
-    uboLayoutInfo.pBindings = &uboLayoutBinding;
-
-    device->table.vkCreateDescriptorSetLayout(device->handle, &uboLayoutInfo, NULL, &pContext->descriptorSetLayout);
-
-    VkDescriptorPoolSize poolSize = { 0 };
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = framesInFlight;
-
-    VkDescriptorPoolCreateInfo poolInfo = { 0 };
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    poolInfo.maxSets = framesInFlight;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
-
-    device->table.vkCreateDescriptorPool(device->handle, &poolInfo, NULL, &pContext->descriptorPool);
-
-    VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*) malloc(framesInFlight * sizeof(VkDescriptorSetLayout));
-    pContext->descriptorSets = (VkDescriptorSet*) malloc(framesInFlight * sizeof(VkDescriptorSet));
-
-    for (int i = 0; i < framesInFlight; i++) {
-        layouts[i] = pContext->descriptorSetLayout;
-    }
-
-    VkDescriptorSetAllocateInfo descriptorAllocateInfo = { 0 };
-    descriptorAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorAllocateInfo.descriptorPool = pContext->descriptorPool;
-    descriptorAllocateInfo.descriptorSetCount = framesInFlight;
-    descriptorAllocateInfo.pSetLayouts = layouts;
-
-    device->table.vkAllocateDescriptorSets(device->handle, &descriptorAllocateInfo, pContext->descriptorSets);
-
-    for (size_t i = 0; i < framesInFlight; i++) {
-        VkDescriptorBufferInfo bufferInfo = { 0 };
-        bufferInfo.buffer = dokVectorCast(VkBuffer, pContext->uniformBuffers.data)[i];
-        bufferInfo.range = sizeof(UniformBufferObject);
-
-        VkWriteDescriptorSet descriptorWrite = { 0 };
-        descriptorWrite.dstSet = pContext->descriptorSets[i];
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.pBufferInfo = &bufferInfo;
-
-        device->table.vkUpdateDescriptorSets(device->handle, 1, &descriptorWrite, 0, NULL);
     }
 
     VkCommandPoolCreateInfo commandPoolInfo = { 0 };
@@ -689,6 +722,17 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     testCreateVertexBuffer(pContext);
     testCreateIndexBuffer(pContext);
 
+    VkDescriptorSetLayoutBinding uboLayoutBinding = { 0 };
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo uboLayoutInfo = { 0 };
+    uboLayoutInfo.bindingCount = 1;
+    uboLayoutInfo.pBindings = &uboLayoutBinding;
+
+    device->table.vkCreateDescriptorSetLayout(device->handle, &uboLayoutInfo, NULL, &pContext->descriptorSetLayout);
+
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = { 0 };
     inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -700,8 +744,6 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
 
     VkPipelineRasterizationStateCreateInfo rasterizationState = { 0 };
     rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizationState.lineWidth = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multisampleState = { 0 };
@@ -721,7 +763,8 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &pContext->descriptorSetLayout;
     
-    device->table.vkCreatePipelineLayout(device->handle, &pipelineLayoutInfo, NULL, &pContext->pipelineLayout);
+    VkPipelineLayout pipelineLayout;
+    device->table.vkCreatePipelineLayout(device->handle, &pipelineLayoutInfo, NULL, &pipelineLayout);
 
     VkGraphicsPipelineCreateInfo pipelineInfo = { 0 };
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -735,7 +778,7 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     pipelineInfo.pMultisampleState = &multisampleState;
     pipelineInfo.pColorBlendState = &colorBlendState;
     pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pContext->pipelineLayout;
+    pipelineInfo.layout = pipelineLayout;
 
     device->table.vkCreateGraphicsPipelines(device->handle, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pContext->pipeline);
     *pOut = pContext;
@@ -778,26 +821,14 @@ void testContextProcess(TestContext context, double deltaTime) {
     TestDevice device = context->device;
     uint32_t frameIndex = context->frameIndex;
 
-    VkSemaphore imageAcquireSemaphore = dokVectorCast(VkSemaphore, context->imageAcquiredSemaphores.data)[frameIndex];
     VkFence fence = dokVectorCast(VkFence, context->fences.data)[frameIndex];
     device->table.vkWaitForFences(device->handle, 1, &fence, VK_TRUE, UINT64_MAX);
+    device->table.vkResetFences(device->handle, 1, &fence);
+
+    VkSemaphore imageAcquireSemaphore = dokVectorCast(VkSemaphore, context->imageAcquiredSemaphores.data)[frameIndex];
 
     uint32_t imageIndex;
     device->table.vkAcquireNextImageKHR(device->handle, device->swapchain, UINT64_MAX, imageAcquireSemaphore, VK_NULL_HANDLE, &imageIndex);
-    
-    VkExtent2D windowExtent;
-    dokGetWindowExtent(device->window, &windowExtent);
-
-    UniformBufferObject ubo = { 0 };
-    glm_mat4_identity(ubo.model);
-
-    glm_rotate(ubo.model, context->elapsedTime * glm_rad(90.0f), (vec3){0.0f, 0.0f, 1.0f});
-
-    glm_lookat((vec3){2.0f, 2.0f, 2.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f}, ubo.view);
-    glm_perspective(glm_rad(45), (float)(windowExtent.width) / (float)(windowExtent.height), 0.1f, 10.0f, ubo.projection);
-    memcpy(dokVectorCast(void*, context->uniformBuffersMapped.data)[frameIndex], &ubo, sizeof(ubo));
-
-    device->table.vkResetFences(device->handle, 1, &fence);
 
     VkCommandBuffer commandBuffer = dokVectorCast(VkCommandBuffer, context->commandBuffers.data)[frameIndex];
     device->table.vkResetCommandBuffer(commandBuffer, 0);
@@ -834,6 +865,8 @@ void testContextProcess(TestContext context, double deltaTime) {
     attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachmentInfo.clearValue = clearValue;
 
+    VkExtent2D windowExtent;
+    dokGetWindowExtent(device->window, &windowExtent);
 
     VkRect2D renderArea = { 0 };
     renderArea.extent = windowExtent;
@@ -848,9 +881,8 @@ void testContextProcess(TestContext context, double deltaTime) {
     device->table.vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
     VkViewport viewport = { 0 };
-    viewport.y = windowExtent.height;
     viewport.width = windowExtent.width;
-    viewport.height = -(float)windowExtent.height;;
+    viewport.height = windowExtent.height;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissors = { 0 };
@@ -858,14 +890,13 @@ void testContextProcess(TestContext context, double deltaTime) {
 
     device->table.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipeline);
     
-    device->table.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    device->table.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
-
     VkDeviceSize offset = { 0 };
     device->table.vkCmdBindVertexBuffers(commandBuffer, 0, 1, &context->vertexBuffer, &offset);
     device->table.vkCmdBindIndexBuffer(commandBuffer, context->indexBuffer, offset, VK_INDEX_TYPE_UINT16);
+    
+    device->table.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    device->table.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
 
-    device->table.vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipelineLayout, 0, 1, &context->descriptorSets[frameIndex], 0, NULL);
     device->table.vkCmdDrawIndexed(commandBuffer, sizeof(indices) / sizeof(indices[0]), 1, 0, 0, 0);
     device->table.vkCmdEndRendering(commandBuffer);
 
@@ -881,6 +912,9 @@ void testContextProcess(TestContext context, double deltaTime) {
 
     device->table.vkEndCommandBuffer(commandBuffer);
     device->table.vkQueueWaitIdle(device->queue);
+
+    UniformBufferObject ubo = { 0 };
+    testRotate(ubo.model, deltaTime, (Vector3){0.0f, 0.0f, 1.0f});
 
     VkSemaphoreSubmitInfo waitSemaphoreInfo = { 0 };
     waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -920,7 +954,6 @@ void testContextProcess(TestContext context, double deltaTime) {
     device->table.vkQueuePresentKHR(device->queue, &presentInfo);
 
     context->frameIndex = (frameIndex + 1) % context->framesInFlight;
-    context->elapsedTime += deltaTime;
 }
 
 
@@ -965,7 +998,7 @@ int main() {
     resizeObserverInfo.pUserData = &device;
 
     DokWindowResizeObserver resizeObserver;
-    dokCreateResizeObserver(window, &resizeObserverInfo, &resizeObserver);
+    // dokCreateResizeObserver(window, &resizeObserverInfo, &resizeObserver);
 
     uint64_t timeFrequency;
     uint64_t time;
@@ -982,6 +1015,9 @@ int main() {
 
         testContextProcess(context, deltaTime);
         dokPollWindow(window);
+
+        device->table.vkDeviceWaitIdle(device->handle);
+        testUpdateSwapchain(device, VK_PRESENT_MODE_FIFO_KHR);
     }
 
     return 0;
