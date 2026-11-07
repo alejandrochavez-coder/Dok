@@ -1381,9 +1381,6 @@ int main() {
     uint32_t physicalDeviceCount;
     testEnumerateDevices(instance, &physicalDeviceCount, NULL);
 
-    // printf("%d", (int)physicalDeviceCount);
-    // return 0;
-
     TestPhysicalDevice* physicalDevices = (TestPhysicalDevice*) malloc(physicalDeviceCount * sizeof(TestPhysicalDevice));
     testEnumerateDevices(instance, &physicalDeviceCount, physicalDevices);
 
