@@ -91,6 +91,10 @@ struct TestContext_T {
     VkDeviceMemory textureImageMemory;
     VkSampler textureImageSampler;
 
+    VkDeviceMemory depthImageMemory;
+    VkImageView depthImageView;
+    VkImage depthImage;
+
     double elapsedTime;
 };
 
@@ -156,6 +160,28 @@ uint16_t indices[] = {
     4, 5, 6, 6, 7, 4
 };
 
+void testCreateImageView(
+    TestDevice          device, 
+    VkImage             image,
+    VkFormat            format,
+    VkImageAspectFlags  aspectMask,
+    VkImageView*        pOut
+) {
+    VkImageSubresourceRange subresourceRange = { 0 };
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+
+    VkImageViewCreateInfo imageViewInfo = { 0 };
+    imageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewInfo.image = image;
+    imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewInfo.format = format;
+    imageViewInfo.subresourceRange = subresourceRange;
+
+    device->table.vkCreateImageView(device->handle, &imageViewInfo, NULL, pOut);
+}
+
 void testUpdateSwapchain(TestDevice device, VkPresentModeKHR presentMode) {
     TestPhysicalDevice physicalDevice = device->physicalDevice;
     TestInstance instance = physicalDevice->instance;
@@ -200,23 +226,17 @@ void testUpdateSwapchain(TestDevice device, VkPresentModeKHR presentMode) {
     }
     dokVectorResize(VkSemaphore, imageCount, device->renderCompleteSemaphores);
 
-    VkImageSubresourceRange subresourceRange = { 0 };
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresourceRange.levelCount = 1;
-    subresourceRange.layerCount = 1;
-
     VkSemaphoreCreateInfo semaphoreInfo = { 0 };
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    for (uint32_t i = 0; i < imageCount; i++) {
-        VkImageViewCreateInfo viewInfo = { 0 };
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = dokVectorCast(VkImage, device->swapchainImages.data)[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = device->imageFormat;
-        viewInfo.subresourceRange = subresourceRange;
-
-        device->table.vkCreateImageView(device->handle, &viewInfo, NULL, &dokVectorCast(VkImageView, device->swapchainImagesViews.data)[i]);
+    for (uint32_t i = 0; i < imageCount; i++) {        
+        testCreateImageView(
+            device, 
+            dokVectorCast(VkImage, device->swapchainImages.data)[i],
+            device->imageFormat,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            &dokVectorCast(VkImageView, device->swapchainImagesViews.data)[i]
+        );
         device->table.vkCreateSemaphore(device->handle, &semaphoreInfo, NULL, &dokVectorCast(VkSemaphore, device->renderCompleteSemaphores.data)[i]);
     }
 
@@ -648,29 +668,27 @@ void testCreateIndexBuffer(TestContext context) {
     copyBuffer(context, stagingBuffer, context->indexBuffer, size);
 }
 
-void testCreateTextureImage(
-    TestContext     context, 
-    const unsigned char*  imageData,
-    uint32_t        width,
-    uint32_t        height,
-    int             channels,
-    VkImage*        pOutImage,
-    VkImageView*    pOutImageView,
-    VkDeviceMemory* pOutImageMemory
-    ) {
-
-    TestDevice device = context->device;
+void testCreateImage(
+    TestDevice              device, 
+    uint32_t                width, 
+    uint32_t                height,
+    VkFormat                format,
+    VkImageTiling           tiling,
+    VkImageUsageFlags       usage,
+    VkMemoryPropertyFlags   properties,
+    VkImage*                pOutImage,
+    VkDeviceMemory*         pOutImageMemory) {
 
     VkImageCreateInfo imageInfo = { 0 };
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    imageInfo.format = format;
     imageInfo.extent = (VkExtent3D){.width = width, .height = height, .depth = 1};
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.tiling = tiling;
+    imageInfo.usage = usage;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VkImage image;
@@ -685,30 +703,60 @@ void testCreateTextureImage(
     memoryAllocateInfo.memoryTypeIndex = testFindMemoryType(
         device,
         memoryRequirements.memoryTypeBits, 
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        properties
     );
 
     VkDeviceMemory imageMemory;
     device->table.vkAllocateMemory(device->handle, &memoryAllocateInfo, NULL, &imageMemory);
     device->table.vkBindImageMemory(device->handle, image, imageMemory, 0);
+    *pOutImage = image;
+    *pOutImageMemory = imageMemory;
+}
+
+void testCreateTextureImage(
+    TestContext     context, 
+    const unsigned char*  imageData,
+    uint32_t        width,
+    uint32_t        height,
+    int             channels,
+    VkImage*        pOutImage,
+    VkImageView*    pOutImageView,
+    VkDeviceMemory* pOutImageMemory
+    ) {
+
+    TestDevice device = context->device;
+    
+    VkDeviceMemory imageMemory;
+    VkImageView imageView;
+    VkImage image;
+
+    testCreateImage(
+        device,
+        width,
+        height,
+        VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &image,
+        &imageMemory
+    );
+
+    testCreateImageView(
+        device,
+        image,
+        VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        &imageView
+    );
+
+    VkCommandBuffer commandBuffer;
+    testBeginSingleTimeCommands(context, &commandBuffer);
 
     VkImageSubresourceRange subresourceRange = { 0 };
     subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     subresourceRange.levelCount = 1;
     subresourceRange.layerCount = 1;
-
-    VkImageViewCreateInfo imageViewInfo = { 0 };
-    imageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imageViewInfo.image = image;
-    imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-    imageViewInfo.subresourceRange = subresourceRange;
-
-    VkImageView imageView;
-    device->table.vkCreateImageView(device->handle, &imageViewInfo, NULL, &imageView);
-
-    VkCommandBuffer commandBuffer;
-    testBeginSingleTimeCommands(context, &commandBuffer);
 
     VkImageMemoryBarrier2 writeBarrier = { 0 };
     writeBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -834,7 +882,6 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
 
     TestPhysicalDevice physicalDevice = device->physicalDevice;
     TestInstance instance = physicalDevice->instance;
-    
 
     VkFormat depthFormats[] = {
         VK_FORMAT_D32_SFLOAT_S8_UINT,
@@ -845,18 +892,41 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     VkFormat depthFormat;
 
     for (size_t i = 0; i < depthFormatsCount; i++) {
-        VkFormatProperties2 formatProperties;
-        formatProperties.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+        VkFormatProperties formatProperties;
         
+        //Laboratory 802 laptops primary gpu dont support 'vkGetPhysicalDeviceFormatProperties2'
+        //for some reason
+
         VkFormat format = depthFormats[i];
-        instance->table.vkGetPhysicalDeviceFormatProperties2(physicalDevice->handle, format, &formatProperties);
-        if (formatProperties.formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+        instance->table.vkGetPhysicalDeviceFormatProperties(physicalDevice->handle, format, &formatProperties);
+        if (formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
             depthFormat = format;
             break;
         }
     }
 
-    VkImageCreateInfo depthImageInfo = { 0 };
+    VkExtent2D windowExtent;
+    dokGetWindowExtent(device->window, &windowExtent);
+
+    testCreateImage(
+        device,
+        windowExtent.width,
+        windowExtent.height,
+        depthFormat,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &pContext->depthImage,
+        &pContext->depthImageMemory
+    );
+
+    testCreateImageView(
+        device,
+        pContext->depthImage,
+        depthFormat,
+        VK_IMAGE_ASPECT_DEPTH_BIT,
+        &pContext->depthImageView
+    );
 
     testCreateVertexBuffer(pContext);
     testCreateIndexBuffer(pContext);
@@ -980,10 +1050,17 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
         );
     }
 
+    VkPipelineDepthStencilStateCreateInfo depthStencilState = { 0 };
+    depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencilState.depthTestEnable = VK_TRUE;
+    depthStencilState.depthWriteEnable = VK_TRUE;
+    depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+
     VkPipelineRenderingCreateInfo renderingInfo = { 0 };
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &device->imageFormat;
+    renderingInfo.depthAttachmentFormat = depthFormat;
 
     VkShaderModuleCreateInfo shaderInfo = { 0 };
     shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1087,6 +1164,7 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     pipelineInfo.pMultisampleState = &multisampleState;
     pipelineInfo.pColorBlendState = &colorBlendState;
     pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.pDepthStencilState = &depthStencilState;
     pipelineInfo.layout = pContext->pipelineLayout;
 
     device->table.vkCreateGraphicsPipelines(device->handle, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pContext->pipeline);
@@ -1124,36 +1202,46 @@ void testContextProcess(TestContext context, double deltaTime) {
     subresourceRange.levelCount = 1;
     subresourceRange.layerCount = 1;
 
-    VkImageMemoryBarrier2 writeBarrier = { 0 };
-    writeBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    writeBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    writeBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    writeBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    writeBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    writeBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    writeBarrier.image = image;
-    writeBarrier.subresourceRange = subresourceRange;
+    VkImageMemoryBarrier2 outputBarriers[] = {
+        (VkImageMemoryBarrier2) {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .image = image,
+            .subresourceRange = (VkImageSubresourceRange) {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            }
+        },
+        (VkImageMemoryBarrier2) {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+            .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+            .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .image = context->depthImage,
+            .subresourceRange = (VkImageSubresourceRange) {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            }
+        }
+    };
 
     VkDependencyInfo writeBarrierInfo = { 0 };
     writeBarrierInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    writeBarrierInfo.imageMemoryBarrierCount = 1;
-    writeBarrierInfo.pImageMemoryBarriers = &writeBarrier;
+    writeBarrierInfo.imageMemoryBarrierCount = sizeof(outputBarriers) / sizeof(outputBarriers[0]);
+    writeBarrierInfo.pImageMemoryBarriers = outputBarriers;
 
     device->table.vkCmdPipelineBarrier2(commandBuffer, &writeBarrierInfo);
 
-    VkClearColorValue clearColor = { .float32 = {0.0f, 0.0f, 0.0f, 1.0f} };
-    VkClearValue clearValue = { 0 };
-    clearValue.color = clearColor;
-
     VkImageView imageView = dokVectorCast(VkImageView, device->swapchainImagesViews.data)[imageIndex];
-
-    VkRenderingAttachmentInfo attachmentInfo = { 0 };
-    attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    attachmentInfo.imageView = imageView;
-    attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentInfo.clearValue = clearValue;
 
     VkExtent2D windowExtent;
     dokGetWindowExtent(device->window, &windowExtent);
@@ -1173,12 +1261,32 @@ void testContextProcess(TestContext context, double deltaTime) {
     VkRect2D renderArea = { 0 };
     renderArea.extent = windowExtent;
 
+    VkClearValue clearValue = { .color = (VkClearColorValue) {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}} };
+    VkClearValue clearDepth = { .depthStencil = (VkClearDepthStencilValue) {.depth = 1.0f} };
+
+    VkRenderingAttachmentInfo attachmentInfo = { 0 };
+    attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    attachmentInfo.imageView = imageView;
+    attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachmentInfo.clearValue = clearValue;
+
+    VkRenderingAttachmentInfo depthInfo = { 0 };
+    depthInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depthInfo.imageView = context->depthImageView;
+    depthInfo.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    depthInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthInfo.clearValue = clearDepth;
+
     VkRenderingInfo renderingInfo = { 0 };
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     renderingInfo.renderArea = renderArea;
     renderingInfo.layerCount = 1;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &attachmentInfo;
+    renderingInfo.pDepthAttachment = &depthInfo;
 
     device->table.vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
@@ -1273,10 +1381,13 @@ int main() {
     uint32_t physicalDeviceCount;
     testEnumerateDevices(instance, &physicalDeviceCount, NULL);
 
+    // printf("%d", (int)physicalDeviceCount);
+    // return 0;
+
     TestPhysicalDevice* physicalDevices = (TestPhysicalDevice*) malloc(physicalDeviceCount * sizeof(TestPhysicalDevice));
     testEnumerateDevices(instance, &physicalDeviceCount, physicalDevices);
 
-    TestPhysicalDevice physicalDevice = physicalDevices[0];
+    TestPhysicalDevice physicalDevice = physicalDevices[1];
     free(physicalDevices);
 
     DokWindowCreateInfo windowInfo = { 0 };
