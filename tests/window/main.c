@@ -3,6 +3,14 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+alignas(uint32_t) const uint8_t spirvShader[] = {
+    #embed "demo.spv"
+};
+
+const unsigned char data[] = {
+    #embed "test_image.jpg" limit(400000)
+};
+
 void observerCallback(DokWindow window, void* pUserData) {
     *((bool*)pUserData) = false;
 }
@@ -20,7 +28,9 @@ int main() {
     DokWindow window;
     dokCreateWindow(&windowInfo, &window);
 
+
     bool exists = true;
+
 
     DokWindowDestroyObserverCreateInfo observerInfo = { 0 };
     observerInfo.pfnCallback = observerCallback;
@@ -38,6 +48,8 @@ int main() {
     
     uint64_t timeFrequency;
     uint64_t time;
+
+
     dokGetTimeFrequency(&timeFrequency);
     dokGetTime(&time);
 

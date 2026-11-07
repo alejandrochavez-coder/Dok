@@ -84,12 +84,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         } 
         break;
 
-    case WM_WINDOWPOSCHANGED:
-        for (int i = 0; i < window->resizeObservers.length; i++) {
-            DokWindowResizeObserver resizeObserver = dokVectorCast(DokWindowResizeObserver, window->resizeObservers.data)[i];
-            resizeObserver->pfnCallback(window, 0, 0, resizeObserver->pUserData);
-        }
-
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;

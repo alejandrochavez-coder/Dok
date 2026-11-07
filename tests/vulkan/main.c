@@ -1,4 +1,7 @@
 #define DOK_VULKAN_TABLES_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+
+#define VALIDATION_LAYERS
 #include <dok/dok_vulkan_tables.h>
 #include <dok/dok_vector.h>
 #include <dok/dok_core.h>
@@ -6,10 +9,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
-#include <math.h>
+#include "linmath.h"
+#include "stb_image.h"
 
 alignas(uint32_t) const uint8_t spirvShader[] = {
     #embed "demo.spv"
+};
+
+const unsigned char imageTexture[] = {
+    #embed "test_image2.png"
 };
 
 typedef struct TestPhysicalDevice_T* TestPhysicalDevice;
@@ -65,7 +73,11 @@ struct TestContext_T {
     VkBuffer vertexBuffer;
 
     VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet* descriptorSets;
+
     VkCommandPool commandPool;
+    VkPipelineLayout pipelineLayout;
     VkPipeline pipeline;
     uint32_t frameIndex;
     uint32_t framesInFlight;
@@ -73,140 +85,76 @@ struct TestContext_T {
     DokVector uniformBuffers;
     DokVector uniformBuffersMemory;
     DokVector uniformBuffersMapped;
+
+    VkImage textureImage;
+    VkImageView textureImageView;
+    VkDeviceMemory textureImageMemory;
+    VkSampler textureImageSampler;
+
+    double elapsedTime;
 };
 
-typedef float Vector2[2];
-typedef float Vector3[3];
-typedef float Vector4[4];
-
-typedef Vector4 Matrix4[4];
-
 typedef struct Vertex {
-    Vector2 position;
-    Vector3 color;
+    vec3 position;
+    vec3 color;
+    vec2 textureCoordinates;
 } Vertex;
 
 Vertex vertices[] = {
     (Vertex){
-        .position = (float[]){ -0.5f, -0.5f },
-        .color = (float[]){ 1.0f, 0.5f, 0.0f }
+        .position = (float[]){ -0.5f, -0.5f, 0.0f },
+        .color = (float[]){ 1.0f, 0.0f, 0.0f },
+        .textureCoordinates = (float[]){ 1.0f, 0.0f } 
     },
     (Vertex){
-        .position = (float[]){ 0.5f, -0.5f },
-        .color = (float[]){ 0.0f, 1.0f, 0.0f }
+        .position = (float[]){ 0.5f, -0.5f, 0.0f },
+        .color = (float[]){ 0.0f, 1.0f, 0.0f },
+        .textureCoordinates = (float[]){ 0.0f, 0.0f }
     },
     (Vertex){
-        .position = (float[]){ 0.5f, 0.5f },
-        .color = (float[]){ 0.0f, 0.0f, 1.0f }
+        .position = (float[]){ 0.5f, 0.5f, 0.0f },
+        .color = (float[]){ 0.0f, 0.0f, 1.0f },
+        .textureCoordinates = (float[]){ 0.0f, 1.0f }
     },
     (Vertex){
-        .position = (float[]){ -0.5f, 0.5f },
-        .color = (float[]){ 0.0f, 0.0f, 1.0f }
+        .position = (float[]){ -0.5f, 0.5f, 0.0f },
+        .color = (float[]){ 1.0f, 1.0f, 1.0f },
+        .textureCoordinates = (float[]){ 1.0f, 1.0f }
+    },
+    
+
+    (Vertex){
+        .position = (float[]){ -0.5f, -0.5f, -0.5f },
+        .color = (float[]){ 1.0f, 0.0f, 0.0f },
+        .textureCoordinates = (float[]){ 1.0f, 0.0f } 
+    },
+    (Vertex){
+        .position = (float[]){ 0.5f, -0.5f, -0.5f },
+        .color = (float[]){ 0.0f, 1.0f, 0.0f },
+        .textureCoordinates = (float[]){ 0.0f, 0.0f }
+    },
+    (Vertex){
+        .position = (float[]){ 0.5f, 0.5f, -0.5f },
+        .color = (float[]){ 0.0f, 0.0f, 1.0f },
+        .textureCoordinates = (float[]){ 0.0f, 1.0f }
+    },
+    (Vertex){
+        .position = (float[]){ -0.5f, 0.5f, -0.5f },
+        .color = (float[]){ 1.0f, 1.0f, 1.0f },
+        .textureCoordinates = (float[]){ 1.0f, 1.0f }
     }
 };
 
 typedef struct UniformBufferObject {
-    Vector4 model;
-    Vector4 view;
-    Vector4 projection;
+    mat4x4 model;
+    mat4x4 view;
+    mat4x4 projection;
 } UniformBufferObject;
 
 uint16_t indices[] = {
-    0, 1, 2, 2, 3, 0
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4
 };
-
-static inline float testVector3Dot(Vector3 a, Vector3 b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-static inline float testVector3LengthSquared(Vector3 v) {
-    return testVector3Dot(v, v);
-}
-
-static inline float testVector3Length(Vector3 v) {
-    return sqrtf(testVector3LengthSquared(v));
-}
-
-static inline void testVector3Zero(Vector3 out) {
-    out[0] = out[1] = out[2] = 0.0f;
-}
-
-static inline void testVector3Scale(Vector3 v, float s, Vector3 out) {
-    out[0] = v[0] * s;
-    out[1] = v[1] * s;
-    out[2] = v[2] * s;
-}
-
-static inline void testVector3Normalize(Vector3 v, Vector3 out) {
-    float length = testVector3Length(v);
-
-    if (length < 10000 * 10000) {
-        testVector3Zero(out);
-        return;
-    }
-
-    testVector3Scale(v, 1.0f / length, out);
-}
-
-static inline void testMulRot(Matrix4 m1, Matrix4 m2, Matrix4 dest) {
-    float a00 = m1[0][0], a01 = m1[0][1], a02 = m1[0][2], a03 = m1[0][3],
-            a10 = m1[1][0], a11 = m1[1][1], a12 = m1[1][2], a13 = m1[1][3],
-            a20 = m1[2][0], a21 = m1[2][1], a22 = m1[2][2], a23 = m1[2][3],
-            a30 = m1[3][0], a31 = m1[3][1], a32 = m1[3][2], a33 = m1[3][3],
-
-            b00 = m2[0][0], b01 = m2[0][1], b02 = m2[0][2],
-            b10 = m2[1][0], b11 = m2[1][1], b12 = m2[1][2],
-            b20 = m2[2][0], b21 = m2[2][1], b22 = m2[2][2];
-
-    dest[0][0] = a00 * b00 + a10 * b01 + a20 * b02;
-    dest[0][1] = a01 * b00 + a11 * b01 + a21 * b02;
-    dest[0][2] = a02 * b00 + a12 * b01 + a22 * b02;
-    dest[0][3] = a03 * b00 + a13 * b01 + a23 * b02;
-
-    dest[1][0] = a00 * b10 + a10 * b11 + a20 * b12;
-    dest[1][1] = a01 * b10 + a11 * b11 + a21 * b12;
-    dest[1][2] = a02 * b10 + a12 * b11 + a22 * b12;
-    dest[1][3] = a03 * b10 + a13 * b11 + a23 * b12;
-
-    dest[2][0] = a00 * b20 + a10 * b21 + a20 * b22;
-    dest[2][1] = a01 * b20 + a11 * b21 + a21 * b22;
-    dest[2][2] = a02 * b20 + a12 * b21 + a22 * b22;
-    dest[2][3] = a03 * b20 + a13 * b21 + a23 * b22;
-
-    dest[3][0] = a30;
-    dest[3][1] = a31;
-    dest[3][2] = a32;
-    dest[3][3] = a33;
-}
-
-static inline void testMakeRotation(Matrix4 m, float angle, Vector3 axis) {
-    float c = cosf(angle);
-
-    Vector3 axis_normalized;
-    Vector3 vs;
-    Vector3 v;
-
-    testVector3Normalize(axis, axis_normalized);
-    testVector3Scale(axis_normalized, 1.0f - c, v);
-    testVector3Scale(axis_normalized, sinf(angle), vs);
-
-    testVector3Scale(axis_normalized, v[0], m[0]);
-    testVector3Scale(axis_normalized, v[1], m[1]);
-    testVector3Scale(axis_normalized, v[2], m[2]);
-
-    m[0][0] += c;       m[1][0] -= vs[2];   m[2][0] += vs[1];
-    m[0][1] += vs[2];   m[1][1] += c;       m[2][1] -= vs[0];
-    m[0][2] -= vs[1];   m[1][2] += vs[0];   m[2][2] += c;
-
-    m[0][3] = m[1][3] = m[2][3] = m[3][0] = m[3][1] = m[3][2] = 0.0f;
-    m[3][3] = 1.0f;
-}
-
-static inline void testRotate(Matrix4 m, float angle, Vector3 axis) {
-    Matrix4 rot;
-    testMakeRotation(rot, angle, axis);
-    testMulRot(m, rot, m);
-}
 
 void testUpdateSwapchain(TestDevice device, VkPresentModeKHR presentMode) {
     TestPhysicalDevice physicalDevice = device->physicalDevice;
@@ -289,6 +237,19 @@ void observerDestroy(DokWindow window, void* pUserData) {
     *((bool*)pUserData) = false;
 }
 
+#ifdef VALIDATION_LAYERS
+VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+    void* userData
+) {
+    printf("[VULKAN VALIDATION] %s\n", callbackData->pMessage);
+
+    return VK_FALSE;
+}
+#endif
+
 void testCreateInstance(TestInstance* pOut) {
     TestInstance pInstance = (TestInstance) malloc(sizeof(struct TestInstance_T));
     dokLoadVulkan(&pInstance->loader);
@@ -306,14 +267,41 @@ void testCreateInstance(TestInstance* pOut) {
 
     const char* instanceExtensions[] = { 
         VK_KHR_SURFACE_EXTENSION_NAME, 
-        dokGetPlatformSurfaceExtension()
+        dokGetPlatformSurfaceExtension(),
+#ifdef VALIDATION_LAYERS
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+#endif
     };
+
+#ifdef VALIDATION_LAYERS
+    const char* validationLayers[] = { "VK_LAYER_KHRONOS_validation", "VK_LAYER_KHRONOS_validation" };
+
+    VkDebugUtilsMessengerCreateInfoEXT debugInfo = { 0 };
+    debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    debugInfo.messageSeverity = 
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+
+    debugInfo.messageType =
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+
+    debugInfo.pfnUserCallback = debugCallback;
+#endif
 
     VkInstanceCreateInfo instanceInfo = { 0 };
     instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceInfo.pApplicationInfo = &appInfo;
     instanceInfo.ppEnabledExtensionNames = instanceExtensions;
     instanceInfo.enabledExtensionCount = sizeof(instanceExtensions) / sizeof(instanceExtensions[0]);
+
+#ifdef VALIDATION_LAYERS
+    instanceInfo.pNext = &debugInfo;
+    instanceInfo.ppEnabledLayerNames = validationLayers;
+    instanceInfo.enabledLayerCount = sizeof(validationLayers) / sizeof(validationLayers[0]);
+#endif
 
     globalTable.vkCreateInstance(&instanceInfo, NULL, &pInstance->handle);
     dokLoadInstanceTable(globalTable.vkGetInstanceProcAddr, pInstance->handle, &pInstance->table);
@@ -454,6 +442,53 @@ void testCreateDevice(TestPhysicalDevice physicalDevice, DokWindow window, VkFor
     *pOut = pDevice;
 }
 
+void testTransitionImageLayout(
+    DokDeviceTable* deviceTable, VkCommandBuffer commandBuffer, VkImage image,
+    VkImageLayout oldLayout,
+    VkImageLayout newLayout,
+    VkImageAspectFlags aspectFlags,
+    VkAccessFlags2 srcAccessMask,
+    VkAccessFlags2 dstAccessMask,
+    VkPipelineStageFlags2 srcStageMask,
+    VkPipelineStageFlags2 dstStageMask) {
+
+    VkImageSubresourceRange subresourceRange = { 0 };
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+    subresourceRange.aspectMask = aspectFlags;
+
+    VkImageMemoryBarrier2 barrier = { 0 };
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = srcStageMask;
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.dstStageMask = dstStageMask;
+    barrier.dstAccessMask = dstAccessMask;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.image = image;
+    barrier.subresourceRange = subresourceRange;
+
+    VkDependencyInfo dependencyInfo = { 0 };
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &barrier;
+
+    deviceTable->vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+}
+
+uint32_t testFindMemoryType(TestDevice device, uint32_t filter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memoryProperties;
+    device->physicalDevice->instance->table.vkGetPhysicalDeviceMemoryProperties(device->physicalDevice->handle, &memoryProperties);
+
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
+        if ((filter & (1 << i) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)) {
+            return i;
+        }
+    }
+    return 0;
+}
+
 void testCreateBuffer(
     TestDevice              device, 
     VkBufferUsageFlags      usage,
@@ -480,13 +515,7 @@ void testCreateBuffer(
     VkMemoryAllocateInfo memoryAllocateInfo = { 0 };
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements.size;
-
-    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
-        if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties)) {
-            memoryAllocateInfo.memoryTypeIndex = i;
-            break;
-        }
-    }
+    memoryAllocateInfo.memoryTypeIndex = testFindMemoryType(device, memoryRequirements.memoryTypeBits, properties);
 
     VkDeviceMemory memory;
 
@@ -498,12 +527,7 @@ void testCreateBuffer(
    
 }
 
-void copyBuffer(
-    TestContext context,
-    VkBuffer srcBuffer, 
-    VkBuffer dstBuffer, 
-    VkDeviceSize size) {
-
+void testBeginSingleTimeCommands(TestContext context, VkCommandBuffer* pOut) {
     VkCommandBufferAllocateInfo allocateInfo = { 0 };
     allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocateInfo.commandPool = context->commandPool;
@@ -511,32 +535,45 @@ void copyBuffer(
     allocateInfo.commandBufferCount = 1;
 
     TestDevice device = context->device;
+    VkCommandBuffer commandBuffer;
 
-    VkCommandBuffer copyCommandBuffer;
-    device->table.vkAllocateCommandBuffers(device->handle, &allocateInfo, &copyCommandBuffer);
+    device->table.vkAllocateCommandBuffers(device->handle, &allocateInfo, &commandBuffer);
 
     VkCommandBufferBeginInfo beginInfo = { 0 };
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+    device->table.vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    *pOut = commandBuffer;
+}
+
+void testEndSingleTimeCommands(TestDevice device, VkCommandBuffer commandBuffer) {
+    device->table.vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo = { 0 };
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    device->table.vkQueueSubmit(device->queue, 1, &submitInfo, NULL);
+    device->table.vkQueueWaitIdle(device->queue);
+}
+
+void copyBuffer(
+    TestContext context,
+    VkBuffer srcBuffer, 
+    VkBuffer dstBuffer, 
+    VkDeviceSize size) {
+
+    VkCommandBuffer copyCommandBuffer;
+    testBeginSingleTimeCommands(context, &copyCommandBuffer);
+
     VkBufferCopy bufferCopy = { 0 };
     bufferCopy.size = size;
 
-    device->table.vkBeginCommandBuffer(copyCommandBuffer, &beginInfo);
+    TestDevice device = context->device;
     device->table.vkCmdCopyBuffer(copyCommandBuffer, srcBuffer, dstBuffer, 1, &bufferCopy);
-    device->table.vkEndCommandBuffer(copyCommandBuffer);
-
-    VkCommandBufferSubmitInfo commandBufferSubmitInfo = { 0 };
-    commandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-    commandBufferSubmitInfo.commandBuffer = copyCommandBuffer;
-
-    VkSubmitInfo2 submitInfo = { 0 };
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    submitInfo.commandBufferInfoCount = 1;
-    submitInfo.pCommandBufferInfos = &commandBufferSubmitInfo;
-
-    device->table.vkQueueSubmit2(device->queue, 1, &submitInfo, NULL);
-    device->table.vkQueueWaitIdle(device->queue);
+    testEndSingleTimeCommands(device, copyCommandBuffer);
 }
 
 void testCreateVertexBuffer(TestContext context) {
@@ -611,6 +648,136 @@ void testCreateIndexBuffer(TestContext context) {
     copyBuffer(context, stagingBuffer, context->indexBuffer, size);
 }
 
+void testCreateTextureImage(
+    TestContext     context, 
+    const unsigned char*  imageData,
+    uint32_t        width,
+    uint32_t        height,
+    int             channels,
+    VkImage*        pOutImage,
+    VkImageView*    pOutImageView,
+    VkDeviceMemory* pOutImageMemory
+    ) {
+
+    TestDevice device = context->device;
+
+    VkImageCreateInfo imageInfo = { 0 };
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    imageInfo.extent = (VkExtent3D){.width = width, .height = height, .depth = 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkImage image;
+    device->table.vkCreateImage(device->handle, &imageInfo, NULL, &image);
+
+    VkMemoryRequirements memoryRequirements;
+    device->table.vkGetImageMemoryRequirements(device->handle, image, &memoryRequirements);
+
+    VkMemoryAllocateInfo memoryAllocateInfo = { 0 };
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.allocationSize = memoryRequirements.size;
+    memoryAllocateInfo.memoryTypeIndex = testFindMemoryType(
+        device,
+        memoryRequirements.memoryTypeBits, 
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    VkDeviceMemory imageMemory;
+    device->table.vkAllocateMemory(device->handle, &memoryAllocateInfo, NULL, &imageMemory);
+    device->table.vkBindImageMemory(device->handle, image, imageMemory, 0);
+
+    VkImageSubresourceRange subresourceRange = { 0 };
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+
+    VkImageViewCreateInfo imageViewInfo = { 0 };
+    imageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewInfo.image = image;
+    imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    imageViewInfo.subresourceRange = subresourceRange;
+
+    VkImageView imageView;
+    device->table.vkCreateImageView(device->handle, &imageViewInfo, NULL, &imageView);
+
+    VkCommandBuffer commandBuffer;
+    testBeginSingleTimeCommands(context, &commandBuffer);
+
+    VkImageMemoryBarrier2 writeBarrier = { 0 };
+    writeBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    writeBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    writeBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    writeBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    writeBarrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    writeBarrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    writeBarrier.subresourceRange = subresourceRange;
+    writeBarrier.image = image;
+
+    VkDependencyInfo writeBarrierInfo = { 0 };
+    writeBarrierInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    writeBarrierInfo.imageMemoryBarrierCount = 1;
+    writeBarrierInfo.pImageMemoryBarriers = &writeBarrier;
+
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &writeBarrierInfo);
+
+    VkDeviceSize byteSize = width * height * channels;
+
+    VkDeviceMemory stagingBufferMemory;
+    VkBuffer stagingBuffer;
+    testCreateBuffer(
+        device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+        byteSize,  
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &stagingBuffer,
+        &stagingBufferMemory
+    );
+
+    void* data;
+    device->table.vkMapMemory(device->handle, stagingBufferMemory, 0, byteSize, 0, &data);
+    memcpy(data, imageData, byteSize);
+    device->table.vkUnmapMemory(device->handle, stagingBufferMemory);
+
+    VkImageSubresourceLayers imageSubresource = { 0 };
+    imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageSubresource.layerCount = 1;
+
+    VkBufferImageCopy imageCopy = { 0 };
+    imageCopy.imageSubresource = imageSubresource;
+    imageCopy.imageExtent = (VkExtent3D){.width = width, .height = height, .depth = 1};
+
+    device->table.vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imageCopy);
+
+    VkImageMemoryBarrier2 readBarrier = { 0 };
+    readBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    readBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    readBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    readBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    readBarrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    readBarrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    readBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    readBarrier.subresourceRange = subresourceRange;
+    readBarrier.image = image;
+
+    VkDependencyInfo readBarrierInfo = { 0 };
+    readBarrierInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    readBarrierInfo.imageMemoryBarrierCount = 1;
+    readBarrierInfo.pImageMemoryBarriers = &readBarrier;
+
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &readBarrierInfo);
+    testEndSingleTimeCommands(device, commandBuffer);
+
+    *pOutImage = image;
+    *pOutImageView = imageView;
+    *pOutImageMemory = imageMemory;
+}
+
 void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* pOut) {
     TestContext pContext = (TestContext) malloc(sizeof(struct TestContext_T));
     dokCreateVectorWithSize(VkSemaphore, &pContext->imageAcquiredSemaphores, framesInFlight);
@@ -624,6 +791,21 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     pContext->device = device;
     pContext->frameIndex = 0;
     pContext->framesInFlight = framesInFlight;
+    pContext->elapsedTime = 0;
+
+    VkCommandPoolCreateInfo commandPoolInfo = { 0 };
+    commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    commandPoolInfo.queueFamilyIndex = device->physicalDevice->queueFamilyIndex;
+
+    device->table.vkCreateCommandPool(device->handle, &commandPoolInfo, NULL, &pContext->commandPool);
+
+    VkCommandBufferAllocateInfo allocateInfo = { 0 };
+    allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocateInfo.commandPool = pContext->commandPool;
+    allocateInfo.commandBufferCount = framesInFlight;
+
+    device->table.vkAllocateCommandBuffers(device->handle, &allocateInfo, dokVectorCast(VkCommandBuffer, pContext->commandBuffers.data));
 
     VkSemaphoreCreateInfo semaphoreInfo = { 0 };
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -647,21 +829,130 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
 
         void* data;
         device->table.vkMapMemory(device->handle, dokVectorCast(VkDeviceMemory, pContext->uniformBuffersMemory.data)[i], 0, bufferSize, 0, &data);
+        dokVectorCast(void*, pContext->uniformBuffersMapped.data)[i] = data;
     }
 
-    VkCommandPoolCreateInfo commandPoolInfo = { 0 };
-    commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    commandPoolInfo.queueFamilyIndex = device->physicalDevice->queueFamilyIndex;
+    testCreateVertexBuffer(pContext);
+    testCreateIndexBuffer(pContext);
 
-    device->table.vkCreateCommandPool(device->handle, &commandPoolInfo, NULL, &pContext->commandPool);
+    int width, height, channels;
+    stbi_uc* pixels = stbi_load_from_memory(
+        imageTexture,
+        sizeof(imageTexture),
+        &width,
+        &height,
+        &channels,
+        STBI_rgb_alpha
+    );
 
-    VkCommandBufferAllocateInfo allocateInfo = { 0 };
-    allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocateInfo.commandPool = pContext->commandPool;
-    allocateInfo.commandBufferCount = framesInFlight;
+    testCreateTextureImage(
+        pContext,
+        pixels, width, height, channels,
+        &pContext->textureImage,
+        &pContext->textureImageView,
+        &pContext->textureImageMemory
+    );
 
-    device->table.vkAllocateCommandBuffers(device->handle, &allocateInfo, dokVectorCast(VkCommandBuffer, pContext->commandBuffers.data));
+    VkSamplerCreateInfo samplerInfo = { 0 };
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_NEAREST;
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
+
+    device->table.vkCreateSampler(device->handle, &samplerInfo, NULL, &pContext->textureImageSampler);
+
+    VkDescriptorSetLayoutBinding bindings[] = {
+        (VkDescriptorSetLayoutBinding) {
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+        },
+        (VkDescriptorSetLayoutBinding) {
+            .binding = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+        }
+    };
+
+    VkDescriptorSetLayoutCreateInfo uboLayoutInfo = { 0 };
+    uboLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    uboLayoutInfo.bindingCount = sizeof(bindings) / sizeof(bindings[0]);
+    uboLayoutInfo.pBindings = bindings;
+
+    device->table.vkCreateDescriptorSetLayout(device->handle, &uboLayoutInfo, NULL, &pContext->descriptorSetLayout);
+
+    VkDescriptorPoolSize poolSizes[] = {
+        (VkDescriptorPoolSize) {
+            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = framesInFlight
+        },
+        (VkDescriptorPoolSize) {
+            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = framesInFlight
+        }
+    };
+
+    VkDescriptorPoolCreateInfo poolInfo = { 0 };
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.maxSets = framesInFlight;
+    poolInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
+    poolInfo.pPoolSizes = poolSizes;
+
+    device->table.vkCreateDescriptorPool(device->handle, &poolInfo, NULL, &pContext->descriptorPool);
+
+    VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*) malloc(framesInFlight * sizeof(VkDescriptorSetLayout));
+    pContext->descriptorSets = (VkDescriptorSet*) malloc(framesInFlight * sizeof(VkDescriptorSet));
+
+    for (int i = 0; i < framesInFlight; i++) {
+        layouts[i] = pContext->descriptorSetLayout;
+    }
+
+    VkDescriptorSetAllocateInfo descriptorAllocateInfo = { 0 };
+    descriptorAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorAllocateInfo.descriptorPool = pContext->descriptorPool;
+    descriptorAllocateInfo.descriptorSetCount = framesInFlight;
+    descriptorAllocateInfo.pSetLayouts = layouts;
+
+    device->table.vkAllocateDescriptorSets(device->handle, &descriptorAllocateInfo, pContext->descriptorSets);
+
+    for (size_t i = 0; i < framesInFlight; i++) {
+        VkDescriptorBufferInfo bufferInfo = { 0 };
+        bufferInfo.buffer = dokVectorCast(VkBuffer, pContext->uniformBuffers.data)[i];
+        bufferInfo.range = sizeof(UniformBufferObject);
+
+        VkDescriptorImageInfo imageInfo = { 0 };
+        imageInfo.sampler = pContext->textureImageSampler;
+        imageInfo.imageView = pContext->textureImageView;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet descriptorWrites[] = {
+            (VkWriteDescriptorSet) {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstBinding = 0,
+                .dstSet = pContext->descriptorSets[i],
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .pBufferInfo = &bufferInfo
+            },
+            (VkWriteDescriptorSet) {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstBinding = 1,
+                .dstSet = pContext->descriptorSets[i],
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .pImageInfo = &imageInfo
+            }
+        };
+
+        device->table.vkUpdateDescriptorSets(
+            device->handle, 
+            sizeof(descriptorWrites) / sizeof(descriptorWrites[0]), 
+            descriptorWrites, 
+            0, NULL
+        );
+    }
 
     VkPipelineRenderingCreateInfo renderingInfo = { 0 };
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -701,16 +992,23 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     bindingDescriptor.stride = sizeof(Vertex);
     bindingDescriptor.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    VkVertexInputAttributeDescription firstAttribute = { 0 };
-    firstAttribute.format = VK_FORMAT_R32G32_SFLOAT;
-    firstAttribute.offset = offsetof(Vertex, position);
-
-    VkVertexInputAttributeDescription secondAttribute = { 0 };
-    secondAttribute.location = 1;
-    secondAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
-    secondAttribute.offset = offsetof(Vertex, color);
-
-    VkVertexInputAttributeDescription attributeDescriptors[] = { firstAttribute, secondAttribute };
+    VkVertexInputAttributeDescription attributeDescriptors[] = {
+        (VkVertexInputAttributeDescription) {
+            .location = 0,
+            .format = VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = offsetof(Vertex, position)
+        },
+        (VkVertexInputAttributeDescription) {
+            .location = 1,
+            .format = VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = offsetof(Vertex, color)
+        },
+        (VkVertexInputAttributeDescription) {
+            .location = 2,
+            .format = VK_FORMAT_R32G32_SFLOAT,
+            .offset = offsetof(Vertex, textureCoordinates)
+        }
+    };
 
     VkPipelineVertexInputStateCreateInfo vertexInputState = { 0 };
     vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -718,20 +1016,6 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     vertexInputState.pVertexBindingDescriptions = &bindingDescriptor;
     vertexInputState.vertexAttributeDescriptionCount = sizeof(attributeDescriptors) / sizeof(attributeDescriptors[0]);
     vertexInputState.pVertexAttributeDescriptions = attributeDescriptors;
-
-    testCreateVertexBuffer(pContext);
-    testCreateIndexBuffer(pContext);
-
-    VkDescriptorSetLayoutBinding uboLayoutBinding = { 0 };
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutCreateInfo uboLayoutInfo = { 0 };
-    uboLayoutInfo.bindingCount = 1;
-    uboLayoutInfo.pBindings = &uboLayoutBinding;
-
-    device->table.vkCreateDescriptorSetLayout(device->handle, &uboLayoutInfo, NULL, &pContext->descriptorSetLayout);
 
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = { 0 };
     inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -763,8 +1047,7 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &pContext->descriptorSetLayout;
     
-    VkPipelineLayout pipelineLayout;
-    device->table.vkCreatePipelineLayout(device->handle, &pipelineLayoutInfo, NULL, &pipelineLayout);
+    device->table.vkCreatePipelineLayout(device->handle, &pipelineLayoutInfo, NULL, &pContext->pipelineLayout);
 
     VkGraphicsPipelineCreateInfo pipelineInfo = { 0 };
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -778,46 +1061,15 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
     pipelineInfo.pMultisampleState = &multisampleState;
     pipelineInfo.pColorBlendState = &colorBlendState;
     pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.layout = pContext->pipelineLayout;
 
     device->table.vkCreateGraphicsPipelines(device->handle, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pContext->pipeline);
     *pOut = pContext;
 }
 
-void testTransitionImageLayout(
-    DokDeviceTable* deviceTable, VkCommandBuffer commandBuffer, VkImage image,
-    VkImageLayout oldLayout,
-    VkImageLayout newLayout,
-    VkAccessFlags2 srcAccessMask,
-    VkAccessFlags2 dstAccessMask,
-    VkPipelineStageFlags2 srcStageMask,
-    VkPipelineStageFlags2 dstStageMask) {
-
-    VkImageSubresourceRange subresourceRange = { 0 };
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresourceRange.levelCount = 1;
-    subresourceRange.layerCount = 1;
-
-    VkImageMemoryBarrier2 barrier = { 0 };
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = srcStageMask;
-    barrier.srcAccessMask = srcAccessMask;
-    barrier.dstStageMask = dstStageMask;
-    barrier.dstAccessMask = dstAccessMask;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.image = image;
-    barrier.subresourceRange = subresourceRange;
-
-    VkDependencyInfo dependencyInfo = { 0 };
-    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.imageMemoryBarrierCount = 1;
-    dependencyInfo.pImageMemoryBarriers = &barrier;
-
-    deviceTable->vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
-}
-
 void testContextProcess(TestContext context, double deltaTime) {
+
+    context->elapsedTime += deltaTime;
     TestDevice device = context->device;
     uint32_t frameIndex = context->frameIndex;
 
@@ -841,15 +1093,27 @@ void testContextProcess(TestContext context, double deltaTime) {
 
     VkImage image = dokVectorCast(VkImage, device->swapchainImages.data)[imageIndex];
 
-    testTransitionImageLayout(
-        &device->table, commandBuffer, image,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_2_NONE,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
-    );
+    VkImageSubresourceRange subresourceRange = { 0 };
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+
+    VkImageMemoryBarrier2 writeBarrier = { 0 };
+    writeBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    writeBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    writeBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    writeBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    writeBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    writeBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    writeBarrier.image = image;
+    writeBarrier.subresourceRange = subresourceRange;
+
+    VkDependencyInfo writeBarrierInfo = { 0 };
+    writeBarrierInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    writeBarrierInfo.imageMemoryBarrierCount = 1;
+    writeBarrierInfo.pImageMemoryBarriers = &writeBarrier;
+
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &writeBarrierInfo);
 
     VkClearColorValue clearColor = { .float32 = {0.0f, 0.0f, 0.0f, 1.0f} };
     VkClearValue clearValue = { 0 };
@@ -868,6 +1132,18 @@ void testContextProcess(TestContext context, double deltaTime) {
     VkExtent2D windowExtent;
     dokGetWindowExtent(device->window, &windowExtent);
 
+    UniformBufferObject ubo = { 0 };
+
+    mat4x4 identity;
+    mat4x4_identity(identity);
+
+    mat4x4_rotate(ubo.model, identity, 0.0f, 0.0f, 1.0f, context->elapsedTime);
+    mat4x4_rotate(ubo.model, identity, 1.0f, 0.0f, 0.0f, context->elapsedTime);
+    mat4x4_rotate(ubo.model, identity, 0.0f, 1.0f, 0.0f, context->elapsedTime);
+    mat4x4_look_at(ubo.view, (vec3){2.0f, 2.0f, 2.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f});
+    mat4x4_perspective(ubo.projection, 1, (float)(windowExtent.width) / (float)(windowExtent.height), 0.1, 10.0f);
+    memcpy(dokVectorCast(void*, context->uniformBuffersMapped.data)[frameIndex], &ubo, sizeof(ubo));
+
     VkRect2D renderArea = { 0 };
     renderArea.extent = windowExtent;
 
@@ -881,8 +1157,9 @@ void testContextProcess(TestContext context, double deltaTime) {
     device->table.vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
     VkViewport viewport = { 0 };
+    viewport.y = windowExtent.height;
     viewport.width = windowExtent.width;
-    viewport.height = windowExtent.height;
+    viewport.height = -(float)windowExtent.height;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissors = { 0 };
@@ -897,24 +1174,30 @@ void testContextProcess(TestContext context, double deltaTime) {
     device->table.vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
     device->table.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
 
+    device->table.vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipelineLayout, 0, 1, &context->descriptorSets[frameIndex], 0, NULL);
     device->table.vkCmdDrawIndexed(commandBuffer, sizeof(indices) / sizeof(indices[0]), 1, 0, 0, 0);
     device->table.vkCmdEndRendering(commandBuffer);
 
-    testTransitionImageLayout(
-        &device->table, commandBuffer, image,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_ACCESS_2_NONE,
-        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
-    );
+    VkImageMemoryBarrier2 presentBarrier = { 0 };
+    presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    presentBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    presentBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    presentBarrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    presentBarrier.dstAccessMask = VK_ACCESS_2_NONE;
+    presentBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    presentBarrier.image = image;
+    presentBarrier.subresourceRange = subresourceRange;
+
+    VkDependencyInfo presentBarrierInfo = { 0 };
+    presentBarrierInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    presentBarrierInfo.imageMemoryBarrierCount = 1;
+    presentBarrierInfo.pImageMemoryBarriers = &presentBarrier;
+
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &presentBarrierInfo);
 
     device->table.vkEndCommandBuffer(commandBuffer);
     device->table.vkQueueWaitIdle(device->queue);
-
-    UniformBufferObject ubo = { 0 };
-    testRotate(ubo.model, deltaTime, (Vector3){0.0f, 0.0f, 1.0f});
 
     VkSemaphoreSubmitInfo waitSemaphoreInfo = { 0 };
     waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -998,7 +1281,7 @@ int main() {
     resizeObserverInfo.pUserData = &device;
 
     DokWindowResizeObserver resizeObserver;
-    // dokCreateResizeObserver(window, &resizeObserverInfo, &resizeObserver);
+    dokCreateResizeObserver(window, &resizeObserverInfo, &resizeObserver);
 
     uint64_t timeFrequency;
     uint64_t time;
@@ -1015,9 +1298,6 @@ int main() {
 
         testContextProcess(context, deltaTime);
         dokPollWindow(window);
-
-        device->table.vkDeviceWaitIdle(device->handle);
-        testUpdateSwapchain(device, VK_PRESENT_MODE_FIFO_KHR);
     }
 
     return 0;
