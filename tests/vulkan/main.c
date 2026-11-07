@@ -1,7 +1,7 @@
 #define DOK_VULKAN_TABLES_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
-#define VALIDATION_LAYERS
+// #define VALIDATION_LAYERS
 #include <dok/dok_vulkan_tables.h>
 #include <dok/dok_vector.h>
 #include <dok/dok_core.h>
@@ -831,6 +831,32 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
         device->table.vkMapMemory(device->handle, dokVectorCast(VkDeviceMemory, pContext->uniformBuffersMemory.data)[i], 0, bufferSize, 0, &data);
         dokVectorCast(void*, pContext->uniformBuffersMapped.data)[i] = data;
     }
+
+    TestPhysicalDevice physicalDevice = device->physicalDevice;
+    TestInstance instance = physicalDevice->instance;
+    
+
+    VkFormat depthFormats[] = {
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT
+    };
+    
+    size_t depthFormatsCount = sizeof(depthFormats) / sizeof(depthFormats[0]);
+    VkFormat depthFormat;
+
+    for (size_t i = 0; i < depthFormatsCount; i++) {
+        VkFormatProperties2 formatProperties;
+        formatProperties.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+        
+        VkFormat format = depthFormats[i];
+        instance->table.vkGetPhysicalDeviceFormatProperties2(physicalDevice->handle, format, &formatProperties);
+        if (formatProperties.formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+            depthFormat = format;
+            break;
+        }
+    }
+
+    VkImageCreateInfo depthImageInfo = { 0 };
 
     testCreateVertexBuffer(pContext);
     testCreateIndexBuffer(pContext);
