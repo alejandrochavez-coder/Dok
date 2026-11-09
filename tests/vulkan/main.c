@@ -17,7 +17,7 @@ alignas(uint32_t) const uint8_t spirvShader[] = {
 };
 
 const unsigned char imageTexture[] = {
-    #embed "test_image2.png"
+    #embed "test_image.png"
 };
 
 typedef struct TestPhysicalDevice_T* TestPhysicalDevice;
@@ -270,7 +270,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 }
 #endif
 
-void testCreateInstance(TestInstance* pOut) {
+void createInstance(TestInstance* pOut) {
     TestInstance pInstance = (TestInstance) malloc(sizeof(struct TestInstance_T));
     dokLoadVulkan(&pInstance->loader);
 
@@ -1026,8 +1026,8 @@ void testCreateContext(TestDevice device, uint32_t framesInFlight, TestContext* 
         VkWriteDescriptorSet descriptorWrites[] = {
             (VkWriteDescriptorSet) {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstBinding = 0,
                 .dstSet = pContext->descriptorSets[i],
+                .dstBinding = 0,
                 .descriptorCount = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                 .pBufferInfo = &bufferInfo
@@ -1376,7 +1376,7 @@ void testContextProcess(TestContext context, double deltaTime) {
 
 int main() {
     TestInstance instance;
-    testCreateInstance(&instance);
+    createInstance(&instance);
 
     uint32_t physicalDeviceCount;
     testEnumerateDevices(instance, &physicalDeviceCount, NULL);

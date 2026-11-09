@@ -9,7 +9,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 include_directories(../../)
 add_executable (dok_vulkan_test
-	"main.c"
+	"kgl.c"
+	"VmaUsage.cpp"
 )
 
 target_link_libraries(dok_vulkan_test PRIVATE dok)

@@ -93,7 +93,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-DokResult dokCreateWindow(DokWindowCreateInfo* pCreateInfo, DokWindow* pOut) {
+DokResult dokCreateWindow(const DokWindowCreateInfo* pCreateInfo, DokWindow* pOut) {
     VkResult result = DOK_ERROR_INITIALIZATION_FAILED;
     if (!pCreateInfo || !pOut) {
         goto exit;
@@ -160,9 +160,9 @@ const char* dokGetPlatformSurfaceExtension() {
     return VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
 }
 
-VkBool32 dokGetPhysicalDevicePresentationSupport(PFN_vkGetInstanceProcAddr instanceProcAddr, VkInstance instance, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) {
+VkBool32 dokGetPhysicalDevicePresentationSupport(const DokVulkanInfo* pVulkanInfo, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) {
     PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR presentationSupport = (PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR)
-        instanceProcAddr(instance, "vkGetPhysicalDeviceWin32PresentationSupportKHR");
+        pVulkanInfo->instanceProcAddr(pVulkanInfo->instance, "vkGetPhysicalDeviceWin32PresentationSupportKHR");
 
     if (!presentationSupport) {
         return VK_FALSE;
@@ -171,20 +171,20 @@ VkBool32 dokGetPhysicalDevicePresentationSupport(PFN_vkGetInstanceProcAddr insta
     return presentationSupport(physicalDevice, queueFamilyIndex);
 }
 
-VkResult dokCreateWindowSurface(PFN_vkGetInstanceProcAddr instanceProcAddr, VkInstance instance, DokWindow window, VkSurfaceKHR* pSurface) {
+VkResult dokCreateWindowSurface(const DokVulkanInfo* pVulkanInfo, DokWindow window, VkSurfaceKHR* pSurface) {
     VkWin32SurfaceCreateInfoKHR info = { 0 };
     info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     info.hinstance = window->hinstance;
     info.hwnd = window->hwnd;
 
     PFN_vkCreateWin32SurfaceKHR createSurface = (PFN_vkCreateWin32SurfaceKHR) 
-        instanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
+        pVulkanInfo->instanceProcAddr(pVulkanInfo->instance, "vkCreateWin32SurfaceKHR");
 
     if (!createSurface) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    return createSurface(instance, &info, NULL, pSurface);
+    return createSurface(pVulkanInfo->instance, &info, NULL, pSurface);
 }
 
 DokResult dokGetWindowExtent(DokWindow window, VkExtent2D* pOut) {

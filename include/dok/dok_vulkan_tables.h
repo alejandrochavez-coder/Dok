@@ -1351,7 +1351,6 @@ void dokLoadDeviceTable(PFN_vkGetDeviceProcAddr deviceProcAddr, VkDevice device,
 
 #endif
 
-
 #ifdef __cplusplus
 }
 #endif

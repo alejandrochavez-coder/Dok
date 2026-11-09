@@ -42,6 +42,11 @@ typedef struct DokWindowCreateInfo {
     uint32_t            width;
 } DokWindowCreateInfo;
 
+typedef struct DokVulkanInfo {
+    PFN_vkGetInstanceProcAddr   instanceProcAddr;
+    VkInstance                  instance;
+} DokVulkanInfo;
+
 void dokGetTime(uint64_t* pOut);
 
 void dokGetTimeFrequency(uint64_t* pOut);
@@ -53,22 +58,20 @@ PFN_vkVoidFunction dokGetFunction(DokVkLoader loader, const char* name);
 void dokUnloadVulkan(DokVkLoader loader);
 
 DokResult dokCreateWindow(
-    DokWindowCreateInfo*    pCreateInfo, 
+    const DokWindowCreateInfo*    pCreateInfo, 
     DokWindow*              pOut);
 
 const char* dokGetPlatformSurfaceExtension();
 
 VkBool32 dokGetPhysicalDevicePresentationSupport(
-    PFN_vkGetInstanceProcAddr   instanceProcAddr, 
-    VkInstance                  instance,
-    VkPhysicalDevice            physicalDevice,
-    uint32_t                    queueFamilyIndex);
+    const DokVulkanInfo*      pVulkanInfo,
+    VkPhysicalDevice    physicalDevice,
+    uint32_t            queueFamilyIndex);
 
 VkResult dokCreateWindowSurface(
-    PFN_vkGetInstanceProcAddr   instanceProcAddr, 
-    VkInstance                  instance,
-    DokWindow                   window,
-    VkSurfaceKHR*               pSurface);
+    const DokVulkanInfo*  pVulkanInfo,
+    DokWindow       window,
+    VkSurfaceKHR*   pSurface);
 
 DokResult dokGetWindowExtent(
     DokWindow   window,

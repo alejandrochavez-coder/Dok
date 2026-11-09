@@ -213,8 +213,7 @@ directory = Path(__file__).parent
 registry = get_registry()
 entries = parse_handle_entries(registry)
 
-for file in directory.rglob("*"):
-    if file.stem == "dok_vulkan_tables":
-        parse_file(entries, file)
+for file in directory.rglob("*.h"):
+    parse_file(entries, file)
 
 # parse_file(entries, directory / "dok_vulkan_tables.h")
