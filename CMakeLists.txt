@@ -47,6 +47,7 @@ else ()
 	FetchContent_Declare(
 		vulkan-headers
 		GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+		GIT_TAG main
 	)
 	FetchContent_MakeAvailable(vulkan-headers)
 	target_link_libraries(dok PUBLIC Vulkan::Headers)

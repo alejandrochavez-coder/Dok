@@ -1,7 +1,7 @@
 #define DOK_VULKAN_TABLES_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_DS_IMPLEMENTATION
-#define KGL_DEBUG
+// #define KGL_DEBUG
 
 #include <dok/dok_vulkan_tables.h>
 #include <dok/dok_core.h>
@@ -35,6 +35,7 @@ struct KglInstance_T {
 struct KglPhysicalDevice_T {
     VkPhysicalDevice handle;
     KglInstance instance;
+    VkPhysicalDeviceProperties properties;
     uint32_t queueFamilyIndex;
 };
 
@@ -239,6 +240,7 @@ void kglEnumeratePhysicalDevices(
         if (kglGetQueueFamily(instance, handle, &queueFamilyIndex) == VK_TRUE) {
 
             KglPhysicalDevice physicalDevice = malloc(sizeof(struct KglPhysicalDevice_T));
+            instance->table.vkGetPhysicalDeviceProperties(handle, &physicalDevice->properties);
             physicalDevice->queueFamilyIndex = queueFamilyIndex;
             physicalDevice->instance = instance;
             physicalDevice->handle = handle;
@@ -327,7 +329,7 @@ void kglUpdateSwapchain(
         dokGetWindowExtent(device->window, &swapchainExtent);
     }
 
-    VkSwapchainCreateInfoKHR swapchainInfo = {
+    const VkSwapchainCreateInfoKHR swapchainInfo = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = device->surface,
         .minImageCount = surfaceCapabilities.minImageCount,
@@ -361,7 +363,7 @@ void kglUpdateSwapchain(
     arrsetlen(pSwapchain->images, imageCount);
     device->table.vkGetSwapchainImagesKHR(device->handle, pSwapchain->handle, &imageCount, pSwapchain->images);
 
-    VkSemaphoreCreateInfo semaphoreInfo = {
+    const VkSemaphoreCreateInfo semaphoreInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
     };
 
@@ -392,21 +394,6 @@ void kglUpdateSwapchain(
         &pSwapchain->depthImage
     );
 }
-
-// struct KglDevice_T {
-//     DokDeviceTable table;
-//     VkDevice handle;
-//     KglPhysicalDevice physicalDevice;
-//     VkDescriptorSetLayout descriptorSetLayout;
-//     VkDescriptorPool descriptorPool;
-//     VkDescriptorSet descriptorSet;
-//     VkCommandPool commandPool;
-//     KglSwapchain swapchain;
-//     VmaAllocator allocator;
-//     VkSurfaceKHR surface;
-//     DokWindow window;
-//     VkQueue queue;
-// };
 
 void kglDestroyDevice(KglDevice device) {
     KglInstance instance = device->physicalDevice->instance;
@@ -766,12 +753,10 @@ struct KglRenderer_T {
 
 void kglDestroyRenderer(KglRenderer renderer) {
     KglDevice device = renderer->device;
-
     kglDestroyImage(renderer->textureImage);
     for (uint32_t i = 0; i < renderer->framesInFlight; i++) {
         kglDestroyFrameResource(renderer->frameResources[i]);
     }
-
     device->table.vkDestroySampler(device->handle, renderer->sampler, NULL);
     device->table.vkDestroyPipelineLayout(device->handle, renderer->pipelineLayout, NULL);
     kglDestroyBuffer(renderer->vertexBuffer);
@@ -860,7 +845,12 @@ void kglCreateRenderer(KglDevice device, const KglRendererCreateInfo* pInfo, Kgl
     };
     uint32_t imageDescriptorCount = sizeof(imageDescriptors) / sizeof(imageDescriptors[0]);
     kglUpdateTextureDescriptors(device, imageDescriptors, imageDescriptorCount);
-
+    const VkPipelineDepthStencilStateCreateInfo depthStencilState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_TRUE,
+        .depthWriteEnable = VK_TRUE,
+        .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL
+    };
     const VkPushConstantRange pushContantRange = {
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
         .size = sizeof(VkDeviceAddress)
@@ -890,6 +880,13 @@ int main() {
 
     KglPhysicalDevice* physicalDevices = malloc(physicalDeviceCount * sizeof(KglPhysicalDevice));
     kglEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
+
+    for (int i = 0; i < physicalDeviceCount; i++) {
+        VkPhysicalDeviceProperties properties = physicalDevices[i]->properties;
+        uint32_t apiVersion = properties.apiVersion;
+        printf("Index: %d; Version: %d.%d.%d; %s\n", 
+            i, VK_API_VERSION_MAJOR(apiVersion), VK_API_VERSION_MINOR(apiVersion), VK_API_VERSION_PATCH(apiVersion), properties.deviceName);
+    }
 
     KglPhysicalDevice physicalDevice = physicalDevices[0];
     free(physicalDevices);
