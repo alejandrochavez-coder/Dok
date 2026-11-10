@@ -58,8 +58,8 @@ PFN_vkVoidFunction dokGetFunction(DokVkLoader loader, const char* name);
 void dokUnloadVulkan(DokVkLoader loader);
 
 DokResult dokCreateWindow(
-    const DokWindowCreateInfo*    pCreateInfo, 
-    DokWindow*              pOut);
+    const DokWindowCreateInfo*  pCreateInfo, 
+    DokWindow*                  pOut);
 
 const char* dokGetPlatformSurfaceExtension();
 

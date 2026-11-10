@@ -31,7 +31,6 @@ int main() {
 
     bool exists = true;
 
-
     DokWindowDestroyObserverCreateInfo observerInfo = { 0 };
     observerInfo.pfnCallback = observerCallback;
     observerInfo.pUserData = &exists;
