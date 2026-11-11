@@ -66,7 +66,6 @@ struct KglDevice_T {
     VkDevice handle;
     KglPhysicalDevice physicalDevice;
     VkDescriptorSetLayout descriptorSetLayout;
-    VkPipelineLayout pipelineLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
     VkCommandPool commandPool;
@@ -89,7 +88,7 @@ typedef struct Vertex {
 } Vertex;
 
 typedef struct PushInfo {
-
+    VkDeviceAddress address;
 } PushInfo;
 
 #ifdef KGL_DEBUG
@@ -419,7 +418,6 @@ void kglDestroyDevice(KglDevice device) {
     if (device->descriptorSetLayout) device->table.vkDestroyDescriptorSetLayout(device->handle, device->descriptorSetLayout, NULL);
     if (device->descriptorPool) device->table.vkDestroyDescriptorPool(device->handle, device->descriptorPool, NULL);
 
-    if (device->pipelineLayout) device->table.vkDestroyPipelineLayout(device->handle, device->pipelineLayout, NULL);
     if (pSwapchain->depthImage) kglDestroyImage(pSwapchain->depthImage);
     if (pSwapchain) device->table.vkDestroySwapchainKHR(device->handle, pSwapchain->handle, NULL);
     if (device->commandPool) device->table.vkDestroyCommandPool(device->handle, device->commandPool, NULL);
@@ -569,25 +567,10 @@ void kglCreateDevice(
         .descriptorSetCount = 1
     };
     device->table.vkAllocateDescriptorSets(device->handle, &descriptorInfo, &device->descriptorSet);
-    const VkPipelineDepthStencilStateCreateInfo depthStencilState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        .depthTestEnable = VK_TRUE,
-        .depthWriteEnable = VK_TRUE,
-        .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL
-    };
     const VkPushConstantRange pushContantRange = {
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
         .size = sizeof(PushInfo)
     };
-    const VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &device->descriptorSetLayout,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pushContantRange
-    };
-    device->table.vkCreatePipelineLayout(device->handle, &pipelineLayoutInfo, NULL, &device->pipelineLayout);
-
     VkCommandPoolCreateInfo commandPoolInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -774,7 +757,6 @@ struct KglRenderer_T {
     KglDevice device;
     KglImage textureImage;
     KglFrameResource* frameResources;
-    VkPipeline pipeline;
     KglBuffer indicesBuffer;
     KglBuffer vertexBuffer;
     VkSampler sampler;
@@ -789,7 +771,6 @@ void kglDestroyRenderer(KglRenderer renderer) {
         kglDestroyFrameResource(renderer->frameResources[i]);
     }
     device->table.vkDestroySampler(device->handle, renderer->sampler, NULL);
-    device->table.vkDestroyPipeline(device->handle, renderer->pipeline, NULL);
     kglDestroyBuffer(renderer->vertexBuffer);
     kglDestroyBuffer(renderer->indicesBuffer);
     free(renderer);
@@ -877,88 +858,6 @@ void kglCreateRenderer(KglDevice device, const KglRendererCreateInfo* pInfo, Kgl
     uint32_t imageDescriptorCount = sizeof(imageDescriptors) / sizeof(imageDescriptors[0]);
     kglUpdateTextureDescriptors(device, imageDescriptors, imageDescriptorCount);
 
-    const VkPipelineVertexInputStateCreateInfo vertexInputState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO
-    };
-    const VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-    };
-    const VkPipelineRasterizationStateCreateInfo rasterizationState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .lineWidth = 1.0f
-    };
-    const VkPipelineMultisampleStateCreateInfo multisampleState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
-    };
-    const VkPipelineColorBlendAttachmentState blendAttachment = {
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-    };
-    const VkPipelineColorBlendStateCreateInfo colorBlendState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &blendAttachment
-    };
-    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-    const VkPipelineDynamicStateCreateInfo dynamicState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = sizeof(dynamicStates) / sizeof(dynamicStates[0]),
-        .pDynamicStates = dynamicStates
-    };
-    const VkShaderModuleCreateInfo shaderInfo = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = sizeof(spirvShader),
-        .pCode = (uint32_t*)spirvShader
-    };
-    VkPipelineShaderStageCreateInfo shaderStages[] = { 
-        (VkPipelineShaderStageCreateInfo) {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .pNext = &shaderInfo,
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .pName = "vertMain"
-        },
-        (VkPipelineShaderStageCreateInfo) {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .pNext = &shaderInfo,
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .pName = "fragMain"
-        } 
-    };
-    const VkPipelineViewportStateCreateInfo viewportState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .viewportCount = 1,
-        .scissorCount = 1,
-    };
-    const VkPipelineRenderingCreateInfo renderingInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &device->swapchain.format,
-        .depthAttachmentFormat = device->swapchain.depthImageFormat
-    };
-    const VkPipelineDepthStencilStateCreateInfo depthStencilState = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        .depthTestEnable = VK_TRUE,
-        .depthWriteEnable = VK_TRUE,
-        .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL
-    };
-    const VkGraphicsPipelineCreateInfo pipelineInfo = {
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = &renderingInfo,
-        .stageCount = sizeof(shaderStages) / sizeof(shaderStages[0]),
-        .pStages = shaderStages,
-        .pVertexInputState = &vertexInputState,
-        .pInputAssemblyState = &inputAssemblyState,
-        .pViewportState = &viewportState,
-        .pRasterizationState = &rasterizationState,
-        .pMultisampleState = &multisampleState,
-        .pColorBlendState = &colorBlendState,
-        .pDynamicState = &dynamicState,
-        .pDepthStencilState = &depthStencilState,
-        .layout = device->pipelineLayout,
-    };
-
-    device->table.vkCreateGraphicsPipelines(device->handle, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &renderer->pipeline);
     *pOut = renderer;
     return;
 
@@ -1073,8 +972,6 @@ void kglProcessRenderer(KglRenderer renderer) {
     const VkRect2D scissors = {
         .extent = windowExtent
     };
-    device->table.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->pipeline);
-    device->table.vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, device->pipelineLayout, 0, 1, &device->descriptorSet, 0, NULL);
 
     device->table.vkCmdEndRendering(commandBuffer);
     const VkImageMemoryBarrier2 presentBarrier = {
