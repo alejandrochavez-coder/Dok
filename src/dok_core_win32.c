@@ -214,7 +214,7 @@ void dokFreeWindow(DokWindow window) {
     free(window);
 }
 
-DokResult dokCreateDestroyObserver(DokWindow window, DokWindowDestroyObserverCreateInfo* pCreateInfo, DokWindowDestroyObserver* pOut) {
+DokResult dokCreateDestroyObserver(DokWindow window, const DokWindowDestroyObserverCreateInfo* pCreateInfo, DokWindowDestroyObserver* pOut) {
     DokWindowDestroyObserver observer = (DokWindowDestroyObserver) malloc(sizeof(struct DokWindowDestroyObserver_T));
     observer->index = window->destroyObservers.length;
     observer->pfnCallback = pCreateInfo->pfnCallback;

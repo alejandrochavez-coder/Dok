@@ -1,7 +1,7 @@
 #define DOK_VULKAN_TABLES_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_DS_IMPLEMENTATION
-// #define KGL_DEBUG
+#define KGL_DEBUG
 
 #include <dok/dok_vulkan_tables.h>
 #include <dok/dok_core.h>
@@ -12,6 +12,10 @@
 #include "stb_image.h"
 #include "linmath.h"
 #include "stb_ds.h"
+
+alignas(uint32_t) const uint8_t spirvShader[] = {
+    #embed "demo.spv"
+};
 
 const unsigned char imageTexture[] = {
     #embed "test_image.png"
@@ -62,6 +66,7 @@ struct KglDevice_T {
     VkDevice handle;
     KglPhysicalDevice physicalDevice;
     VkDescriptorSetLayout descriptorSetLayout;
+    VkPipelineLayout pipelineLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
     VkCommandPool commandPool;
@@ -410,6 +415,7 @@ void kglDestroyDevice(KglDevice device) {
     if (device->descriptorSetLayout) device->table.vkDestroyDescriptorSetLayout(device->handle, device->descriptorSetLayout, NULL);
     if (device->descriptorPool) device->table.vkDestroyDescriptorPool(device->handle, device->descriptorPool, NULL);
 
+    if (device->pipelineLayout) device->table.vkDestroyPipelineLayout(device->handle, device->pipelineLayout, NULL);
     if (pSwapchain->depthImage) kglDestroyImage(pSwapchain->depthImage);
     if (pSwapchain) device->table.vkDestroySwapchainKHR(device->handle, pSwapchain->handle, NULL);
     if (device->commandPool) device->table.vkDestroyCommandPool(device->handle, device->commandPool, NULL);
@@ -491,6 +497,7 @@ void kglCreateDevice(
     const VkPhysicalDeviceVulkan14Features enabledVk14Features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
         .pNext = &enabledVk13Features,
+        .maintenance5 = VK_TRUE,
         .hostImageCopy = VK_TRUE
     };
 
@@ -557,6 +564,24 @@ void kglCreateDevice(
         .descriptorSetCount = 1
     };
     device->table.vkAllocateDescriptorSets(device->handle, &descriptorInfo, &device->descriptorSet);
+    const VkPipelineDepthStencilStateCreateInfo depthStencilState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_TRUE,
+        .depthWriteEnable = VK_TRUE,
+        .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL
+    };
+    const VkPushConstantRange pushContantRange = {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .size = sizeof(VkDeviceAddress)
+    };
+    const VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &device->descriptorSetLayout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushContantRange
+    };
+    device->table.vkCreatePipelineLayout(device->handle, &pipelineLayoutInfo, NULL, &device->pipelineLayout);
 
     VkCommandPoolCreateInfo commandPoolInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -742,13 +767,14 @@ typedef struct KglRendererCreateInfo {
 
 struct KglRenderer_T {
     KglDevice device;
-    VkPipelineLayout pipelineLayout;
     KglImage textureImage;
     KglFrameResource* frameResources;
+    VkPipeline pipeline;
     KglBuffer indicesBuffer;
     KglBuffer vertexBuffer;
     VkSampler sampler;
     uint32_t framesInFlight;
+    uint32_t frameIndex;
 };
 
 void kglDestroyRenderer(KglRenderer renderer) {
@@ -758,7 +784,7 @@ void kglDestroyRenderer(KglRenderer renderer) {
         kglDestroyFrameResource(renderer->frameResources[i]);
     }
     device->table.vkDestroySampler(device->handle, renderer->sampler, NULL);
-    device->table.vkDestroyPipelineLayout(device->handle, renderer->pipelineLayout, NULL);
+    device->table.vkDestroyPipeline(device->handle, renderer->pipeline, NULL);
     kglDestroyBuffer(renderer->vertexBuffer);
     kglDestroyBuffer(renderer->indicesBuffer);
     free(renderer);
@@ -845,30 +871,205 @@ void kglCreateRenderer(KglDevice device, const KglRendererCreateInfo* pInfo, Kgl
     };
     uint32_t imageDescriptorCount = sizeof(imageDescriptors) / sizeof(imageDescriptors[0]);
     kglUpdateTextureDescriptors(device, imageDescriptors, imageDescriptorCount);
+
+    const VkPipelineVertexInputStateCreateInfo vertexInputState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO
+    };
+    const VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+    };
+    const VkPipelineRasterizationStateCreateInfo rasterizationState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .lineWidth = 1.0f
+    };
+    const VkPipelineMultisampleStateCreateInfo multisampleState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
+    };
+    const VkPipelineColorBlendAttachmentState blendAttachment = {
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+    };
+    const VkPipelineColorBlendStateCreateInfo colorBlendState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &blendAttachment
+    };
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    const VkPipelineDynamicStateCreateInfo dynamicState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = sizeof(dynamicStates) / sizeof(dynamicStates[0]),
+        .pDynamicStates = dynamicStates
+    };
+    const VkShaderModuleCreateInfo shaderInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(spirvShader),
+        .pCode = (uint32_t*)spirvShader
+    };
+    VkPipelineShaderStageCreateInfo shaderStages[] = { 
+        (VkPipelineShaderStageCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = &shaderInfo,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .pName = "vertMain"
+        },
+        (VkPipelineShaderStageCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = &shaderInfo,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .pName = "fragMain"
+        } 
+    };
+    const VkPipelineViewportStateCreateInfo viewportState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1,
+    };
+    const VkPipelineRenderingCreateInfo renderingInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &device->swapchain.format,
+        .depthAttachmentFormat = device->swapchain.depthImageFormat
+    };
     const VkPipelineDepthStencilStateCreateInfo depthStencilState = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable = VK_TRUE,
         .depthWriteEnable = VK_TRUE,
         .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL
     };
-    const VkPushConstantRange pushContantRange = {
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        .size = sizeof(VkDeviceAddress)
+    const VkGraphicsPipelineCreateInfo pipelineInfo = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = &renderingInfo,
+        .stageCount = sizeof(shaderStages) / sizeof(shaderStages[0]),
+        .pStages = shaderStages,
+        .pVertexInputState = &vertexInputState,
+        .pInputAssemblyState = &inputAssemblyState,
+        .pViewportState = &viewportState,
+        .pRasterizationState = &rasterizationState,
+        .pMultisampleState = &multisampleState,
+        .pColorBlendState = &colorBlendState,
+        .pDynamicState = &dynamicState,
+        .pDepthStencilState = &depthStencilState,
+        .layout = device->pipelineLayout,
     };
-    const VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &device->descriptorSetLayout,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pushContantRange
-    };
-    device->table.vkCreatePipelineLayout(device->handle, &pipelineLayoutInfo, NULL, &renderer->pipelineLayout);
 
+    device->table.vkCreateGraphicsPipelines(device->handle, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &renderer->pipeline);
     *pOut = renderer;
     return;
 
 cleanup:
     kglDestroyRenderer(renderer);
+}
+
+void destroyObserverCallback(DokWindow window, void* pUserData) {
+    *((bool*)pUserData) = false;
+}
+
+void resizeObserverCallback(DokWindow window, uint32_t width, uint32_t height, void* pUserData) {
+    KglDevice device = *((KglDevice*)pUserData);
+    kglUpdateSwapchain(device, VK_PRESENT_MODE_FIFO_KHR);
+}
+
+void kglProcessRenderer(KglRenderer renderer) {
+    KglDevice device = renderer->device;
+    uint32_t frameIndex = renderer->frameIndex;
+
+    KglFrameResource frameResource = renderer->frameResources[frameIndex];
+    VkCommandBuffer commandBuffer = frameResource->commandBuffer;
+    VkSemaphore imageAcquireSemaphore = frameResource->semaphore;
+    KglImage depthImage = device->swapchain.depthImage;
+    VkFence fence = frameResource->fence;
+
+    device->table.vkWaitForFences(device->handle, 1, &fence, VK_TRUE, UINT64_MAX);
+    device->table.vkResetFences(device->handle, 1, &fence);
+
+    uint32_t imageIndex;
+    device->table.vkAcquireNextImageKHR(device->handle, device->swapchain.handle, UINT64_MAX, imageAcquireSemaphore, VK_NULL_HANDLE, &imageIndex);
+    VkImageView imageView = device->swapchain.imageViews[imageIndex];
+    VkImage image = device->swapchain.images[imageIndex];
+
+    device->table.vkResetCommandBuffer(commandBuffer, 0);
+    const VkCommandBufferBeginInfo beginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+    };
+    device->table.vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    VkImageMemoryBarrier2 outputBarriers[] = {
+        (VkImageMemoryBarrier2) {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .image = image,
+            .subresourceRange = (VkImageSubresourceRange) {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            }
+        },
+        (VkImageMemoryBarrier2) {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+            .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+            .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .image = device->swapchain.depthImage->handle,
+            .subresourceRange = (VkImageSubresourceRange) {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            }
+        }
+    };
+    const VkDependencyInfo writeBarrierInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = sizeof(outputBarriers) / sizeof(outputBarriers[0]),
+        .pImageMemoryBarriers = outputBarriers
+    };
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &writeBarrierInfo);
+    const VkRenderingAttachmentInfo attachmentInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = (VkClearValue) { .color = (VkClearColorValue) {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}} }
+    };
+    const VkRenderingAttachmentInfo depthInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = depthImage->view,
+        .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue = (VkClearValue) { .depthStencil = (VkClearDepthStencilValue) {.depth = 1.0f} }
+    }; 
+    VkExtent2D windowExtent;
+    dokGetWindowExtent(device->window, &windowExtent);
+    const VkRenderingInfo renderingInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = (VkRect2D) {.extent = windowExtent},
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentInfo,
+        .pDepthAttachment = &depthInfo,
+    };
+    device->table.vkCmdBeginRendering(commandBuffer, &renderingInfo);
+    const VkViewport viewport = {
+        .y = windowExtent.height,
+        .width = windowExtent.width,
+        .height = -(float)windowExtent.height,
+        .maxDepth = 1.0f
+    };
+    const VkRect2D scissors = {
+        .extent = windowExtent
+    };
+    device->table.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->pipeline);
+
+
 }
 
 int main() {
@@ -912,6 +1113,24 @@ int main() {
 
     KglRenderer renderer;
     kglCreateRenderer(device, &rendererInfo, &renderer);
+
+    const DokWindowResizeObserverCreateInfo resizeObserverInfo = {
+        .pUserData = &device,
+        .pfnCallback = resizeObserverCallback
+    };
+
+    bool exists = true;
+    const DokWindowDestroyObserverCreateInfo destroyObserverInfo = {
+        .pUserData = &exists,
+        .pfnCallback = destroyObserverCallback
+    };
+    DokWindowDestroyObserver destroyObserver;
+    dokCreateDestroyObserver(window, &destroyObserverInfo, &destroyObserver);
+
+    while (exists) {
+        kglProcessRenderer(renderer);
+        dokPollWindow(window);
+    }
 
     kglDestroyRenderer(renderer);
 

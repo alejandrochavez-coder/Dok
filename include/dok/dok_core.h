@@ -81,7 +81,7 @@ void dokFreeWindow(DokWindow window);
 
 DokResult dokCreateDestroyObserver(
     DokWindow                           window, 
-    DokWindowDestroyObserverCreateInfo* pCreateInfo, 
+    const DokWindowDestroyObserverCreateInfo* pCreateInfo, 
     DokWindowDestroyObserver*           pOut);
 
 void dokDestroyDestroyObserver(
