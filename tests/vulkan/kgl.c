@@ -1,7 +1,7 @@
 #define DOK_VULKAN_TABLES_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_DS_IMPLEMENTATION
-#define KGL_DEBUG
+// #define KGL_DEBUG
 
 #include <dok/dok_vulkan_tables.h>
 #include <dok/dok_core.h>
@@ -87,6 +87,10 @@ typedef struct Vertex {
     vec3 position;
     vec3 color;
 } Vertex;
+
+typedef struct PushInfo {
+
+} PushInfo;
 
 #ifdef KGL_DEBUG
 VKAPI_ATTR VkBool32 VKAPI_CALL kglDebugCallback(
@@ -437,6 +441,7 @@ void kglCreateDevice(
     KglInstance instance = physicalDevice->instance;
     device->physicalDevice = physicalDevice;
     device->swapchain.format = VK_FORMAT_B8G8R8A8_SRGB;
+    device->window = window;
 
     VkFormat depthFormats[] = {
         VK_FORMAT_D32_SFLOAT_S8_UINT,
@@ -572,7 +577,7 @@ void kglCreateDevice(
     };
     const VkPushConstantRange pushContantRange = {
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        .size = sizeof(VkDeviceAddress)
+        .size = sizeof(PushInfo)
     };
     const VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -985,6 +990,7 @@ void kglProcessRenderer(KglRenderer renderer) {
 
     uint32_t imageIndex;
     device->table.vkAcquireNextImageKHR(device->handle, device->swapchain.handle, UINT64_MAX, imageAcquireSemaphore, VK_NULL_HANDLE, &imageIndex);
+    VkSemaphore renderCompleteSemaphore = device->swapchain.imageSemaphores[imageIndex];
     VkImageView imageView = device->swapchain.imageViews[imageIndex];
     VkImage image = device->swapchain.images[imageIndex];
 
@@ -1068,8 +1074,67 @@ void kglProcessRenderer(KglRenderer renderer) {
         .extent = windowExtent
     };
     device->table.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->pipeline);
+    device->table.vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, device->pipelineLayout, 0, 1, &device->descriptorSet, 0, NULL);
 
+    device->table.vkCmdEndRendering(commandBuffer);
+    const VkImageMemoryBarrier2 presentBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        .dstAccessMask = VK_ACCESS_2_NONE,
+        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .image = image,
+        .subresourceRange = (VkImageSubresourceRange) {
+            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+            .levelCount = 1,
+            .layerCount = 1
+        }
+    };
+    const VkDependencyInfo presentBarrierInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &presentBarrier
+    };
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &presentBarrierInfo);
+    device->table.vkEndCommandBuffer(commandBuffer);
+    device->table.vkQueueWaitIdle(device->queue);
 
+    const VkSemaphoreSubmitInfo waitSemaphoreInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = imageAcquireSemaphore,
+        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
+    };
+    const VkCommandBufferSubmitInfo commandBufferSubmitInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .commandBuffer = commandBuffer
+    };
+    const VkSemaphoreSubmitInfo signalSemaphoreInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = renderCompleteSemaphore,
+        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
+    };
+    const VkSubmitInfo2 submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount = 1,
+        .pWaitSemaphoreInfos = &waitSemaphoreInfo,
+        .commandBufferInfoCount = 1,
+        .pCommandBufferInfos = &commandBufferSubmitInfo,
+        .signalSemaphoreInfoCount = 1,
+        .pSignalSemaphoreInfos = &signalSemaphoreInfo
+    };
+    device->table.vkQueueSubmit2(device->queue, 1, &submitInfo, fence);
+    const VkPresentInfoKHR presentInfo = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &renderCompleteSemaphore,
+        .swapchainCount = 1,
+        .pSwapchains = &device->swapchain.handle,
+        .pImageIndices = &imageIndex
+    };
+    device->table.vkQueuePresentKHR(device->queue, &presentInfo);
+    renderer->frameIndex = (frameIndex + 1) % renderer->framesInFlight;
 }
 
 int main() {

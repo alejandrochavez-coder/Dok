@@ -4,13 +4,12 @@ struct VSOutput
     nointerpolation float4 Color;
 }
 
-struct Registers
-{
+struct PushInfo {
     float2 **positions;
 };
 
 [shader("vertex")]
-VSOutput vertMain(uint instanceIndex: SV_InstanceID, uint vertexIndex: SV_VertexID, uniform Registers registers) {
+VSOutput vertMain(uint instanceIndex: SV_InstanceID, uint vertexIndex: SV_VertexID, uniform PushInfo registers) {
     int slice = instanceIndex;
 
     // One VBO per instance, load the VBO pointer.
