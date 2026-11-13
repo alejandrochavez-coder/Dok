@@ -230,7 +230,7 @@ void dokDestroyDestroyObserver(DokWindow window, DokWindowDestroyObserver observ
     free(observer);
 }
 
-DokResult dokCreateResizeObserver(DokWindow window, DokWindowResizeObserverCreateInfo* pCreateInfo, DokWindowResizeObserver* pOut) {
+DokResult dokCreateResizeObserver(DokWindow window, const DokWindowResizeObserverCreateInfo* pCreateInfo, DokWindowResizeObserver* pOut) {
     DokWindowResizeObserver observer = (DokWindowResizeObserver) malloc(sizeof(struct DokWindowResizeObserver_T));
     observer->index = window->resizeObservers.length;
     observer->pfnCallback = pCreateInfo->pfnCallback;

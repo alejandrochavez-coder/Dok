@@ -90,7 +90,7 @@ void dokDestroyDestroyObserver(
 
 DokResult dokCreateResizeObserver(
     DokWindow                           window,
-    DokWindowResizeObserverCreateInfo*  pCreateInfo,
+    const DokWindowResizeObserverCreateInfo*  pCreateInfo,
     DokWindowResizeObserver*            pOut);
 
 void dokDestroyResizeObserver(
