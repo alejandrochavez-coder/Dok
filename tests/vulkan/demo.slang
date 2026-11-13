@@ -14,10 +14,11 @@ struct VSOutput
 [require(spvDescriptorHeapEXT)]
 VSOutput vertexMain(uint vertexIndex : SV_VertexID)
 {
-    StructuredBuffer<Vertex>.Handle vertexBufferHandle = StructuredBuffer<Vertex>.Handle(uint2(0, 0));
+    // StructuredBuffer<Vertex>.Handle vertexBufferHandle = StructuredBuffer<Vertex>.Handle(uint2(0, 0));
 
-    StructuredBuffer<Vertex> vertices = vertexBufferHandle;
-
+    // StructuredBuffer<Vertex> vertices = vertexBufferHandle;
+    __loadResourceDescriptorFromHeap
+    // Texture2D.Handle()
     Vertex vertex = vertices[vertexIndex];
 
     VSOutput output;

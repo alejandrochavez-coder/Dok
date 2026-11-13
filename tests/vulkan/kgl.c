@@ -39,7 +39,6 @@ struct KglInstance_T {
 struct KglPhysicalDevice_T {
     VkPhysicalDevice handle;
     KglInstance instance;
-    VkPhysicalDeviceDescriptorHeapPropertiesEXT heapProperties;
     VkPhysicalDeviceProperties properties;
     uint32_t queueFamilyIndex;
 };
@@ -83,6 +82,7 @@ typedef struct UniformBufferObject {
 typedef struct Vertex {
     vec3 position;
     vec3 color;
+    vec2 uv;
 } Vertex;
 
 typedef struct PushInfo {
@@ -97,16 +97,23 @@ typedef struct CameraData {
 Vertex vertices[] = {
     (Vertex){
         .position = (float[]){ 0.0f, -0.5f, 0.0f },
-        .color = (float[]){ 1.0f, 0.0f, 0.0f }
+        .color = (float[]){ 1.0f, 0.0f, 0.0f },
+        .uv = (float[]){ 1.0f, 0.0f }
     },
     (Vertex){
         .position = (float[]){ 0.5f, 0.5f, 0.0f },
-        .color = (float[]){ 0.0f, 1.0f, 0.0f }
+        .color = (float[]){ 0.0f, 1.0f, 0.0f },
+        .uv = (float[]){ 0.0f, 0.0f }
     },
     (Vertex){
         .position = (float[]){ -0.5f, 0.5f, 0.0f },
-        .color = (float[]){ 0.0f, 0.0f, 1.0f }
+        .color = (float[]){ 0.0f, 0.0f, 1.0f },
+        .uv = (float[]){ 0.0f, 1.0f }
     }
+};
+
+uint16_t indices[] = {
+    0, 1, 2
 };
 
 #ifdef KGL_DEBUG
@@ -266,16 +273,11 @@ void kglEnumeratePhysicalDevices(
         if (kglGetQueueFamily(instance, handle, &queueFamilyIndex) == VK_TRUE) {
 
             KglPhysicalDevice physicalDevice = malloc(sizeof(struct KglPhysicalDevice_T));
-            VkPhysicalDeviceDescriptorHeapPropertiesEXT heapProperties = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT
-            };
             VkPhysicalDeviceProperties2 properties = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-                .pNext = &heapProperties
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2
             };
             instance->table.vkGetPhysicalDeviceProperties2(handle, &properties);
             physicalDevice->properties = properties.properties;
-            physicalDevice->heapProperties = heapProperties;
             physicalDevice->queueFamilyIndex = queueFamilyIndex;
             physicalDevice->instance = instance;
             physicalDevice->handle = handle;
@@ -300,50 +302,50 @@ void kglDestroyImage(KglImage image) {
     free(image);
 }
 
+typedef struct KglImageCreateInfo {
+    VkExtent3D extent;
+    VkFormat format;
+    VkImageUsageFlags usage;
+    VmaAllocationCreateFlags flags;
+    VkImageAspectFlags aspectMask;
+} KglImageCreateInfo;
+
 void kglCreateImage(
     KglDevice                   device,
-    VkExtent2D                  extent,
-    VkFormat                    format,
-    VkImageUsageFlags           usage,
-    VmaAllocationCreateFlagBits flags,
-    VkImageAspectFlags          aspectMask,
+    const KglImageCreateInfo*   pInfo,
     KglImage*                   pOut
 ) {
     KglImage image = malloc(sizeof(struct KglImage_T));
-    const VkExtent3D imageExtent = {
-        .width = extent.width,
-        .height = extent.height,
-        .depth = 1
-    };
-    const VkImageCreateInfo info = {
+    KglImageCreateInfo info = *pInfo;
+    const VkImageCreateInfo imageInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = format,
-        .extent = imageExtent,
+        .format = info.format,
+        .extent = info.extent,
         .arrayLayers = 1,
         .mipLevels = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = usage
+        .usage = info.usage
     };
     const VmaAllocationCreateInfo allocationInfo = {
-        .flags = flags,
+        .flags = info.flags,
         .usage = VMA_MEMORY_USAGE_AUTO
     };
-    vmaCreateImage(device->allocator, &info, &allocationInfo, &image->handle, &image->allocation, NULL);
+    vmaCreateImage(device->allocator, &imageInfo, &allocationInfo, &image->handle, &image->allocation, NULL);
     const VkImageViewCreateInfo viewInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = format,
+        .format = info.format,
         .image = image->handle,
         .subresourceRange = (VkImageSubresourceRange) {
-            .aspectMask = aspectMask,
+            .aspectMask = info.aspectMask,
             .levelCount = 1,
             .layerCount = 1
         }
     };
     device->table.vkCreateImageView(device->handle, &viewInfo, NULL, &image->view);
-    image->extent = imageExtent;
+    image->extent = info.extent;
     image->device = device;
     *pOut = image;
 }
@@ -419,15 +421,14 @@ void kglUpdateSwapchain(
     }
 
     if (pSwapchain->depthImage) kglDestroyImage(pSwapchain->depthImage);
-    kglCreateImage(
-        device,
-        swapchainExtent,
-        pSwapchain->depthImageFormat,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-        VK_IMAGE_ASPECT_DEPTH_BIT,
-        &pSwapchain->depthImage
-    );
+    const KglImageCreateInfo depthImageInfo = {
+        .extent = (VkExtent3D) {.width = swapchainExtent.width, .height = swapchainExtent.height, .depth = 1 },
+        .format = pSwapchain->depthImageFormat,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT
+    };
+    kglCreateImage(device, &depthImageInfo, &pSwapchain->depthImage);
 }
 
 void kglDestroyDevice(KglDevice device) {
@@ -493,9 +494,7 @@ void kglCreateDevice(
     dokCreateWindowSurface(&vulkanInfo, window, &device->surface);
 
     const char* deviceExtensions[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME ,
-        VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
-        VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
     uint32_t queueFamilyIndex = physicalDevice->queueFamilyIndex;
     float priority = 1.0f;
@@ -507,20 +506,8 @@ void kglCreateDevice(
         .pQueuePriorities = &priority
     };
 
-    VkPhysicalDeviceDescriptorHeapFeaturesEXT enabledDescriptorHeapFeatures = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
-        .descriptorHeap = VK_TRUE
-    };
-
-    VkPhysicalDeviceShaderObjectFeaturesEXT enabledShaderObjectFeatures = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
-        .pNext = &enabledDescriptorHeapFeatures,
-        .shaderObject = VK_TRUE
-    };
-
     VkPhysicalDeviceVulkan12Features enabledVk12Features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-        .pNext = &enabledShaderObjectFeatures,
         .descriptorIndexing = VK_TRUE,
         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
         // .descriptorBindingVariableDescriptorCount = VK_TRUE,
@@ -537,20 +524,13 @@ void kglCreateDevice(
         .dynamicRendering = VK_TRUE
     };
 
-    const VkPhysicalDeviceVulkan14Features enabledVk14Features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
-        .pNext = &enabledVk13Features,
-        .maintenance5 = VK_TRUE,
-        .hostImageCopy = VK_TRUE
-    };
-
     const VkPhysicalDeviceFeatures enabledvk10Features = {
         .samplerAnisotropy = VK_TRUE
     };
 
     const VkDeviceCreateInfo deviceInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &enabledVk14Features,
+        .pNext = &enabledVk13Features,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueInfo,
         .enabledExtensionCount = sizeof(deviceExtensions) / sizeof(deviceExtensions[0]),
@@ -685,13 +665,13 @@ struct KglFrameResource_T {
     KglDevice device;
     VkCommandBuffer commandBuffer;
     VkSemaphore semaphore;
-    // KglBuffer cameraBuffer;
+    KglBuffer cameraBuffer;
     VkFence fence;
 };
 
 void kglDestroyFrameResource(KglFrameResource frameResource) {
     KglDevice device = frameResource->device;
-    // kglDestroyBuffer(frameResource->cameraBuffer);
+    kglDestroyBuffer(frameResource->cameraBuffer);
     device->table.vkDestroySemaphore(device->handle, frameResource->semaphore, NULL);
     device->table.vkDestroyFence(device->handle, frameResource->fence, NULL);
     free(frameResource);
@@ -716,7 +696,7 @@ void kglCreateFrameResource(
     };
     const KglBufferCreateInfo bufferInfo = {
         .size = sizeof(CameraData),
-        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        .usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | 
             VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | 
             VMA_ALLOCATION_CREATE_MAPPED_BIT,
@@ -725,9 +705,100 @@ void kglCreateFrameResource(
     device->table.vkAllocateCommandBuffers(device->handle, &commandBufferInfo, &frameResource->commandBuffer);
     device->table.vkCreateSemaphore(device->handle, &semaphoreInfo, NULL, &frameResource->semaphore);
     device->table.vkCreateFence(device->handle, &fenceInfo, NULL, &frameResource->fence);
-    // kglCreateBuffer(device, &bufferInfo, &frameResource->cameraBuffer);
+    kglCreateBuffer(device, &bufferInfo, &frameResource->cameraBuffer);
     frameResource->device = device;
     *pOut = frameResource;
+}
+
+typedef struct KglTextureDescriptor_T* KglTextureDescriptor;
+struct KglTextureDescriptor_T {
+    VkSampler sampler;
+    KglImage texture;
+    VkImageLayout layout;
+};
+
+typedef struct KglTextureDescriptorCreateInfo {
+    VkFormat format;
+    VkExtent3D extent;
+} KglTextureDescriptorCreateInfo;
+
+void kglCreateTextureDescriptor(
+    KglDevice device, 
+    const KglTextureDescriptorCreateInfo* pInfo, 
+    KglTextureDescriptor* pOut
+) {
+
+    KglTextureDescriptor textureDescriptor = malloc(sizeof(struct KglTextureDescriptor_T));
+    KglTextureDescriptorCreateInfo info = *pInfo;
+    const VkSamplerCreateInfo samplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_NEAREST,
+        .minFilter = VK_FILTER_NEAREST
+    };
+    device->table.vkCreateSampler(device->handle, &samplerInfo, NULL, &textureDescriptor->sampler);
+
+    // int width, height, channels;
+    // stbi_uc* pixels = stbi_load_from_memory(imageTexture, sizeof(imageTexture), &width, &height, &channels, STBI_rgb_alpha);
+    // stbi_image_free(pixels);
+
+    const KglImageCreateInfo textureImageInfo = {
+        .format = info.format,
+        .extent = info.extent,
+        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT
+    };
+    kglCreateImage(device, &textureImageInfo, &renderer->textureImage);
+    KglBuffer stagingBuffer;
+    const KglBufferCreateInfo stagingBufferInfo = {
+        .size = width * height * channels,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO
+    };
+    kglCreateBuffer(device, &stagingBufferInfo, &stagingBuffer);
+    memcpy(stagingBuffer->allocationInfo.pMappedData, pixels, width * height * channels);
+    VkCommandBuffer stagingCommandBuffer;
+    kglBeginSingleTimeCommands(device, &stagingCommandBuffer);
+    VkImageMemoryBarrier2 writeBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image = renderer->textureImage->handle,
+        .subresourceRange = (VkImageSubresourceRange){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}
+    };
+    VkDependencyInfo barrierTexInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &writeBarrier
+    };
+    device->table.vkCmdPipelineBarrier2(stagingCommandBuffer, &barrierTexInfo);
+    VkBufferImageCopy copyInfo = {
+        .imageSubresource = (VkImageSubresourceLayers) {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
+        .imageExtent = (VkExtent3D) {.width = width, .height = height, .depth = 1 }
+    };
+    device->table.vkCmdCopyBufferToImage(stagingCommandBuffer, stagingBuffer->handle, renderer->textureImage->handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
+    
+    VkImageMemoryBarrier2 readBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+        .subresourceRange = (VkImageSubresourceRange){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
+        .image = renderer->textureImage->handle
+    };
+    VkDependencyInfo readBarrierInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &readBarrier
+    };
+    device->table.vkCmdPipelineBarrier2(stagingCommandBuffer, &readBarrierInfo);
+    kglEndSubmitSingleTimeCommands(device, stagingCommandBuffer);
+    kglDestroyBuffer(stagingBuffer);
 }
 
 typedef struct KglRendererCreateInfo {
@@ -738,32 +809,25 @@ typedef struct KglRendererCreateInfo {
 
 struct KglRenderer_T {
     KglDevice device;
-    VkShaderEXT shaders[2];
-    KglBuffer resourceHeap;
-    KglBuffer modelDataBuffers[2];
     // KglImage textureImage;
     KglFrameResource* frameResources;
+    KglImage textureImage;
     // KglBuffer indicesBuffer;
-    KglBuffer vertexBuffer;
-    // VkSampler sampler;
+    VkSampler sampler;
+    KglBuffer buffer;
     uint32_t framesInFlight;
     uint32_t frameIndex;
 };
 
 void kglDestroyRenderer(KglRenderer renderer) {
     KglDevice device = renderer->device;
-    device->table.vkDestroyShaderEXT(device->handle, renderer->shaders[0], NULL);
-    device->table.vkDestroyShaderEXT(device->handle, renderer->shaders[1], NULL);
-    kglDestroyBuffer(renderer->resourceHeap);
-    kglDestroyBuffer(renderer->vertexBuffer);
     for (int i = 0; i < renderer->framesInFlight; i++) {
         kglDestroyFrameResource(renderer->frameResources[i]);
     }
+    kglDestroyBuffer(renderer->buffer);
+    kglDestroyImage(renderer->textureImage);
+    device->table.vkDestroySampler(device->handle, renderer->sampler, NULL);
     free(renderer);
-}
-
-VkDeviceSize alignUp(VkDeviceSize value, VkDeviceSize alignment) {
-    return ((value + (alignment - 1)) / alignment) * alignment;
 }
 
 void kglCreateRenderer(KglDevice device, const KglRendererCreateInfo* pInfo, KglRenderer* pOut) {
@@ -772,126 +836,97 @@ void kglCreateRenderer(KglDevice device, const KglRendererCreateInfo* pInfo, Kgl
     renderer->framesInFlight = pInfo->framesInFlight;
     renderer->device = device;
 
-    VkShaderCreateInfoEXT shaderCreateInfos[] = {
-        (VkShaderCreateInfoEXT) {
-            .sType = VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-            .flags = VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT | VK_SHADER_CREATE_LINK_STAGE_BIT_EXT,
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = sizeof(spirvShader),
-            .pCode = (uint32_t*)spirvShader,
-            .pName = "vertMain"
-        },
-        (VkShaderCreateInfoEXT) {
-            .sType = VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-            .flags = VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT | VK_SHADER_CREATE_LINK_STAGE_BIT_EXT,
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = sizeof(spirvShader),
-            .pCode = (uint32_t*)spirvShader,
-            .pName = "fragMain"
-        }
-    };
-    device->table.vkCreateShadersEXT(device->handle, 2, shaderCreateInfos, NULL, renderer->shaders);
-    VkPhysicalDeviceDescriptorHeapPropertiesEXT heapProperties = device->physicalDevice->heapProperties;
-
     KglPhysicalDevice physicalDevice = device->physicalDevice;
     KglInstance instance = physicalDevice->instance;
-
-    uint32_t imageCount = 1;
-    uint32_t bufferCount = 1;
-
-    VkDeviceSize imageStride = alignUp(
-        heapProperties.imageDescriptorSize,
-        heapProperties.imageDescriptorAlignment
-    );
-    VkDeviceSize bufferStride = alignUp(
-        heapProperties.bufferDescriptorSize,
-        heapProperties.bufferDescriptorAlignment
-    );
-    VkDeviceSize imageOffset = 0;
-    VkDeviceSize bufferOffset = alignUp(
-        imageOffset + imageCount * imageStride,
-        heapProperties.bufferDescriptorAlignment
-    );
-    VkDeviceSize descriptorEnd = bufferOffset + bufferCount * bufferStride;
-    VkDeviceSize resourceHeapSize = alignUp(
-        descriptorEnd + heapProperties.minResourceHeapReservedRange, 
-        heapProperties.resourceHeapAlignment
-    );
-    
-    const KglBufferCreateInfo resourceHeapInfo = {
-        .size = resourceHeapSize,
-        .usage = VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        .memoryUsage = VMA_MEMORY_USAGE_AUTO
-    };
-    kglCreateBuffer(device, &resourceHeapInfo, &renderer->resourceHeap);
-    void* mappedHead = renderer->resourceHeap->allocationInfo.pMappedData;
-
-    const KglBufferCreateInfo vertexBufferInfo = {
-        .size = sizeof(vertices),
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        .memoryUsage = VMA_MEMORY_USAGE_AUTO
-    };
-    kglCreateBuffer(device, &vertexBufferInfo, &renderer->vertexBuffer);
-    memcpy(renderer->vertexBuffer->allocationInfo.pMappedData, vertices, sizeof(vertices));
-    const VkDeviceAddressRangeEXT vertexAddressRange = {
-        .address = renderer->vertexBuffer->address,
-        .size = sizeof(vertices)
-    };
-    const VkResourceDescriptorInfoEXT vertexDescriptor = {
-        .sType = VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
-        .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .data = (VkResourceDescriptorDataEXT) {.pAddressRange = &vertexAddressRange}
-    };
-    const VkHostAddressRangeEXT descriptorDestination = {
-        .address = mappedHead + bufferOffset,
-        .size = heapProperties.bufferDescriptorSize
-    };
-    device->table.vkWriteResourceDescriptorsEXT(
-        device->handle,
-        1,
-        &vertexDescriptor,
-        &descriptorDestination
-    );
-    // kglCreateBuffer(device, &samplerHeapInfo, &renderer->samplerHeap);
-
-    // for (uint32_t i = 0; i < 2; i++) {
-    //     const KglBufferCreateInfo modelBufferInfo = {
-    //         .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-    //         .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-    //         .memoryUsage = VMA_MEMORY_USAGE_AUTO
-    //     }
-    // }
-    // kglCreateBuffer(device,)
-
-    // kglCreateImage(device,)
 
     renderer->frameResources = malloc(pInfo->framesInFlight * sizeof(KglFrameResource));
     for (uint32_t i = 0; i < pInfo->framesInFlight; i++) {
         kglCreateFrameResource(device, &renderer->frameResources[i]);
     }
-    // const VkSamplerCreateInfo samplerInfo = {
-    //     .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-    //     .magFilter = VK_FILTER_NEAREST,
-    //     .minFilter = VK_FILTER_NEAREST
-    // };
-    // device->table.vkCreateSampler(device->handle, &samplerInfo, NULL, &renderer->sampler);
 
-    // int width, height, channels;
-    // stbi_uc* pixels = stbi_load_from_memory(
-    //     imageTexture,
-    //     sizeof(imageTexture),
-    //     &width,
-    //     &height,
-    //     &channels,
-    //     STBI_rgb_alpha
-    // );
-    // VkExtent2D imageExtent = {.width = width, .height = height};
-    // kglCreateImage(
+    VkDeviceSize vertexBufferSize = sizeof(vertices) / sizeof(vertices[0]);
+    VkDeviceSize indexBufferSize = sizeof(indices) / sizeof(indices[0]);
+    const KglBufferCreateInfo bufferInfo = {
+        .size = vertexBufferSize + indexBufferSize,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | 
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO
+    };
+    kglCreateBuffer(device, &bufferInfo, &renderer->buffer);
+    void* mapHead = renderer->buffer->allocationInfo.pMappedData;
+    memcpy(mapHead, vertices, vertexBufferSize);
+    memcpy(mapHead + vertexBufferSize, indices, indexBufferSize);
+    const VkSamplerCreateInfo samplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_NEAREST,
+        .minFilter = VK_FILTER_NEAREST
+    };
+    device->table.vkCreateSampler(device->handle, &samplerInfo, NULL, &renderer->sampler);
+
+    int width, height, channels;
+    stbi_uc* pixels = stbi_load_from_memory(imageTexture, sizeof(imageTexture), &width, &height, &channels, STBI_rgb_alpha);
+    stbi_image_free(pixels);
+
+    const KglImageCreateInfo textureImageInfo = {
+        .format = VK_FORMAT_R8G8B8A8_SRGB,
+        .extent = (VkExtent3D) {.width = width, .height = height, .depth = 1 },
+        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT
+    };
+    kglCreateImage(device, &textureImageInfo, &renderer->textureImage);
+    KglBuffer stagingBuffer;
+    const KglBufferCreateInfo stagingBufferInfo = {
+        .size = width * height * channels,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO
+    };
+    kglCreateBuffer(device, &stagingBufferInfo, &stagingBuffer);
+    memcpy(stagingBuffer->allocationInfo.pMappedData, pixels, width * height * channels);
+    VkCommandBuffer stagingCommandBuffer;
+    kglBeginSingleTimeCommands(device, &stagingCommandBuffer);
+    VkImageMemoryBarrier2 writeBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image = renderer->textureImage->handle,
+        .subresourceRange = (VkImageSubresourceRange){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}
+    };
+    VkDependencyInfo barrierTexInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &writeBarrier
+    };
+    device->table.vkCmdPipelineBarrier2(stagingCommandBuffer, &barrierTexInfo);
+    VkBufferImageCopy copyInfo = {
+        .imageSubresource = (VkImageSubresourceLayers) {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
+        .imageExtent = (VkExtent3D) {.width = width, .height = height, .depth = 1 }
+    };
+    device->table.vkCmdCopyBufferToImage(stagingCommandBuffer, stagingBuffer->handle, renderer->textureImage->handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
+    
+    VkImageMemoryBarrier2 readBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+        .subresourceRange = (VkImageSubresourceRange){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
+        .image = renderer->textureImage->handle
+    };
+    VkDependencyInfo readBarrierInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &readBarrier
+    };
+    device->table.vkCmdPipelineBarrier2(stagingCommandBuffer, &readBarrierInfo);
+    kglEndSubmitSingleTimeCommands(device, stagingCommandBuffer);
+    kglDestroyBuffer(stagingBuffer);    // kglCreateImage(
     //     device,
     //     imageExtent,
     //     VK_FORMAT_R8G8B8A8_SRGB,
@@ -1052,37 +1087,6 @@ void kglProcessRenderer(KglRenderer renderer) {
     };
     device->table.vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
-    VkPhysicalDeviceDescriptorHeapPropertiesEXT heapProperties = device->physicalDevice->heapProperties;
-    const VkBindHeapInfoEXT resourceHeapInfo = {
-        .sType = VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT,
-        .heapRange = (VkDeviceAddressRangeEXT) {
-            .address = renderer->resourceHeap->address,
-            .size = renderer->resourceHeap->size
-        },
-        .reservedRangeSize = heapProperties.minResourceHeapReservedRange
-    };
-    device->table.vkCmdBindResourceHeapEXT(commandBuffer, &resourceHeapInfo);
-    const VkShaderStageFlagBits stages[2] = {
-        VK_SHADER_STAGE_VERTEX_BIT,
-        VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-    device->table.vkCmdBindShadersEXT(commandBuffer, 2, stages, renderer->shaders);
-    const VkViewport viewport = {
-        .y = windowExtent.height,
-        .width = windowExtent.width,
-        .height = -(float)windowExtent.height,
-        .maxDepth = 1.0f
-    };
-    const VkRect2D scissors = {
-        .extent = windowExtent
-    };
-    device->table.vkCmdSetViewportWithCount(commandBuffer, 1, &viewport);
-    device->table.vkCmdSetScissorWithCount(commandBuffer, 1, &scissors);
-    device->table.vkCmdSetPrimitiveTopology(commandBuffer, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-
-    VkDeviceSize vertexBufferOffset = 0;
-    device->table.vkCmdBindVertexBuffers(commandBuffer, 0, 1, &renderer->vertexBuffer->handle, &vertexBufferOffset);
-
     device->table.vkCmdEndRendering(commandBuffer);
     const VkImageMemoryBarrier2 presentBarrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -1161,7 +1165,7 @@ int main() {
             i, VK_API_VERSION_MAJOR(apiVersion), VK_API_VERSION_MINOR(apiVersion), VK_API_VERSION_PATCH(apiVersion), properties.deviceName);
     }
 
-    KglPhysicalDevice physicalDevice = physicalDevices[0];
+    KglPhysicalDevice physicalDevice = physicalDevices[1];
     free(physicalDevices);
 
     const DokWindowCreateInfo windowInfo = {
