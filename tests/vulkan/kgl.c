@@ -295,13 +295,6 @@ end:
     }
 }
 
-void kglDestroyImage(KglImage image) {
-    KglDevice device = image->device;
-    device->table.vkDestroyImageView(device->handle, image->view, NULL);
-    vmaDestroyImage(device->allocator, image->handle, image->allocation);
-    free(image);
-}
-
 typedef struct KglImageCreateInfo {
     VkExtent3D extent;
     VkFormat format;
@@ -309,6 +302,13 @@ typedef struct KglImageCreateInfo {
     VmaAllocationCreateFlags flags;
     VkImageAspectFlags aspectMask;
 } KglImageCreateInfo;
+
+void kglDestroyImage(KglImage image) {
+    KglDevice device = image->device;
+    device->table.vkDestroyImageView(device->handle, image->view, NULL);
+    vmaDestroyImage(device->allocator, image->handle, image->allocation);
+    free(image);
+}
 
 void kglCreateImage(
     KglDevice                   device,
@@ -348,6 +348,61 @@ void kglCreateImage(
     image->extent = info.extent;
     image->device = device;
     *pOut = image;
+}
+
+void kglImagePasteData(KglImage image, VkDeviceSize dataSize, const void* pData) {
+    KglDevice device = image->device;
+    KglBuffer stagingBuffer;
+    const KglBufferCreateInfo stagingBufferInfo = {
+        .size = dataSize,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO
+    };
+    kglCreateBuffer(device, &stagingBufferInfo, &stagingBuffer);
+    memcpy(stagingBuffer->allocationInfo.pMappedData, pData, dataSize);
+    VkCommandBuffer commandBuffer;
+    kglBeginSingleTimeCommands(device, &commandBuffer);
+    const VkImageMemoryBarrier2 writeBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image = image->handle,
+        .subresourceRange = (VkImageSubresourceRange){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}
+    };
+    const VkDependencyInfo barrierTexInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &writeBarrier
+    };
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &barrierTexInfo);
+    VkBufferImageCopy copyInfo = {
+        .imageSubresource = (VkImageSubresourceLayers) {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
+        .imageExtent = image->extent
+    };
+    device->table.vkCmdCopyBufferToImage(commandBuffer, stagingBuffer->handle, image->handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
+    
+    VkImageMemoryBarrier2 readBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+        .subresourceRange = (VkImageSubresourceRange){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
+        .image = textureDescriptor->image->handle
+    };
+    VkDependencyInfo readBarrierInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &readBarrier
+    };
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &readBarrierInfo);
+    kglEndSubmitSingleTimeCommands(device, commandBuffer);
+    kglDestroyBuffer(stagingBuffer);
 }
 
 void kglUpdateSwapchain(
@@ -713,11 +768,13 @@ void kglCreateFrameResource(
 typedef struct KglTextureDescriptor_T* KglTextureDescriptor;
 struct KglTextureDescriptor_T {
     VkSampler sampler;
-    KglImage texture;
+    KglImage image;
     VkImageLayout layout;
 };
 
 typedef struct KglTextureDescriptorCreateInfo {
+    VkDeviceSize dataSize;
+    const void* pData;
     VkFormat format;
     VkExtent3D extent;
 } KglTextureDescriptorCreateInfo;
@@ -736,49 +793,46 @@ void kglCreateTextureDescriptor(
         .minFilter = VK_FILTER_NEAREST
     };
     device->table.vkCreateSampler(device->handle, &samplerInfo, NULL, &textureDescriptor->sampler);
-
-    // int width, height, channels;
-    // stbi_uc* pixels = stbi_load_from_memory(imageTexture, sizeof(imageTexture), &width, &height, &channels, STBI_rgb_alpha);
-    // stbi_image_free(pixels);
-
     const KglImageCreateInfo textureImageInfo = {
         .format = info.format,
         .extent = info.extent,
         .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT
     };
-    kglCreateImage(device, &textureImageInfo, &renderer->textureImage);
+    kglCreateImage(device, &textureImageInfo, &textureDescriptor->image);
+
+
     KglBuffer stagingBuffer;
     const KglBufferCreateInfo stagingBufferInfo = {
-        .size = width * height * channels,
+        .size = info.dataSize,
         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
             VMA_ALLOCATION_CREATE_MAPPED_BIT,
         .memoryUsage = VMA_MEMORY_USAGE_AUTO
     };
     kglCreateBuffer(device, &stagingBufferInfo, &stagingBuffer);
-    memcpy(stagingBuffer->allocationInfo.pMappedData, pixels, width * height * channels);
-    VkCommandBuffer stagingCommandBuffer;
-    kglBeginSingleTimeCommands(device, &stagingCommandBuffer);
-    VkImageMemoryBarrier2 writeBarrier = {
+    memcpy(stagingBuffer->allocationInfo.pMappedData, info.pData, info.dataSize);
+    VkCommandBuffer commandBuffer;
+    kglBeginSingleTimeCommands(device, &commandBuffer);
+    const VkImageMemoryBarrier2 writeBarrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
         .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
         .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .image = renderer->textureImage->handle,
+        .image = textureDescriptor->image->handle,
         .subresourceRange = (VkImageSubresourceRange){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}
     };
-    VkDependencyInfo barrierTexInfo = {
+    const VkDependencyInfo barrierTexInfo = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .imageMemoryBarrierCount = 1,
         .pImageMemoryBarriers = &writeBarrier
     };
-    device->table.vkCmdPipelineBarrier2(stagingCommandBuffer, &barrierTexInfo);
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &barrierTexInfo);
     VkBufferImageCopy copyInfo = {
         .imageSubresource = (VkImageSubresourceLayers) {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-        .imageExtent = (VkExtent3D) {.width = width, .height = height, .depth = 1 }
+        .imageExtent = info.extent
     };
-    device->table.vkCmdCopyBufferToImage(stagingCommandBuffer, stagingBuffer->handle, renderer->textureImage->handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
+    device->table.vkCmdCopyBufferToImage(commandBuffer, stagingBuffer->handle, textureDescriptor->image->handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
     
     VkImageMemoryBarrier2 readBarrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -789,16 +843,18 @@ void kglCreateTextureDescriptor(
         .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
         .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
         .subresourceRange = (VkImageSubresourceRange){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-        .image = renderer->textureImage->handle
+        .image = textureDescriptor->image->handle
     };
     VkDependencyInfo readBarrierInfo = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .imageMemoryBarrierCount = 1,
         .pImageMemoryBarriers = &readBarrier
     };
-    device->table.vkCmdPipelineBarrier2(stagingCommandBuffer, &readBarrierInfo);
-    kglEndSubmitSingleTimeCommands(device, stagingCommandBuffer);
+    device->table.vkCmdPipelineBarrier2(commandBuffer, &readBarrierInfo);
+    kglEndSubmitSingleTimeCommands(device, commandBuffer);
     kglDestroyBuffer(stagingBuffer);
+
+
 }
 
 typedef struct KglRendererCreateInfo {
