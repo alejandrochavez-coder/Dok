@@ -99,7 +99,7 @@ Vertex vertices[] = {
         .uv = (float[]){ 0.0f, 0.0f }
     },
     (Vertex){
-        .position = (float[]){ 0.0f, 0.5f, 0.0f },
+        .position = (float[]){ -0.5f, 0.5f, 0.0f },
         .uv = (float[]){ 0.0f, 1.0f }
     }
 };
@@ -1132,10 +1132,11 @@ void kglProcessRenderer(KglRenderer renderer, double deltaTime) {
     mat4x4_identity(identity);
 
     UniformBuffer ubo = { 0 };
-    // mat4x4_rotate(ubo.model, identity, 0.0f, 0.0f, 1.0f, 0);
     mat4x4_identity(ubo.model);
-    // mat4x4_look_at(ubo.view, (vec3){renderer->elapsedTime, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f});
+    // mat4x4_rotate(ubo.model, identity, 0.0f, 0.0f, 1.0f, 0);
     mat4x4_identity(ubo.view);
+    // mat4x4_look_at(ubo.view, (vec3){renderer->elapsedTime, 2.0f, 0.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f});
+    mat4x4_identity(ubo.projection);
     // mat4x4_perspective(ubo.projection, 0.8, (float)(windowExtent.width) / (float)(windowExtent.height), 0.1, 32.0f);
     // mat4x4 vulkanCorrection = {
     //     {1, 0,   0,   0},
@@ -1144,7 +1145,6 @@ void kglProcessRenderer(KglRenderer renderer, double deltaTime) {
     //     {0, 0, 0.5f,  1}
     // };
     // mat4x4_mul(ubo.projection, vulkanCorrection, ubo.projection);
-    mat4x4_identity(ubo.projection);
     ubo.vertices = renderer->vertexBuffer->address;
     kglFrameResourceCopyUniform(frameResource, &ubo);
 
@@ -1220,7 +1220,7 @@ void kglProcessRenderer(KglRenderer renderer, double deltaTime) {
     const VkViewport viewport = {
         // .y = windowExtent.height,
         .width = windowExtent.width,
-        .height = (float)windowExtent.height,
+        .height = windowExtent.height,
         .maxDepth = 1.0f
     };
     const VkRect2D scissor = { .extent = windowExtent };
@@ -1314,7 +1314,7 @@ int main() {
             i, VK_API_VERSION_MAJOR(apiVersion), VK_API_VERSION_MINOR(apiVersion), VK_API_VERSION_PATCH(apiVersion), properties.deviceName);
     }
 
-    KglPhysicalDevice physicalDevice = physicalDevices[0];
+    KglPhysicalDevice physicalDevice = physicalDevices[1];
     free(physicalDevices);
 
     const DokWindowCreateInfo windowInfo = {

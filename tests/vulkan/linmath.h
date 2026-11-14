@@ -389,12 +389,12 @@ LINMATH_H_FUNC void mat4x4_perspective(mat4x4 m, float y_fov, float aspect, floa
 
 	m[2][0] = 0.f;
 	m[2][1] = 0.f;
-	m[2][2] = -((f + n) / (f - n));
-	m[2][3] = -1.f;
+	m[2][2] = f / (f - n);
+	m[2][3] = 1.f;
 
 	m[3][0] = 0.f;
 	m[3][1] = 0.f;
-	m[3][2] = -((2.f * f * n) / (f - n));
+	m[3][2] = -(f * n) / (f - n);
 	m[3][3] = 0.f;
 }
 LINMATH_H_FUNC void mat4x4_look_at(mat4x4 m, vec3 const eye, vec3 const center, vec3 const up)
