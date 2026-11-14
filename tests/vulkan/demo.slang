@@ -1,29 +1,37 @@
-struct Vertex
-{
-    float2 position;
-    float3 color;
+struct Vertex {
+    float3 position;
+    float2 uv;
 };
 
-struct VSOutput
-{
+Sampler2D textures[];
+
+struct ShaderData {
+    float4x4 projection;
+    float4x4 view;
+    float4x4 model;
+    Vertex *vertices;
+};
+
+struct VSOutput {
     float4 position : SV_Position;
-    float3 color : COLOR0;
+    uint32_t instanceIndex;
+    float2 uv;
 };
 
 [shader("vertex")]
-[require(spvDescriptorHeapEXT)]
-VSOutput vertexMain(uint vertexIndex : SV_VertexID)
-{
-    // StructuredBuffer<Vertex>.Handle vertexBufferHandle = StructuredBuffer<Vertex>.Handle(uint2(0, 0));
-
-    // StructuredBuffer<Vertex> vertices = vertexBufferHandle;
-    __loadResourceDescriptorFromHeap
-    // Texture2D.Handle()
-    Vertex vertex = vertices[vertexIndex];
-
+VSOutput vertMain(uint instanceIndex: SV_VulkanInstanceID, uint vertexIndex: SV_VertexID, uniform ShaderData *shaderData) {
     VSOutput output;
-    output.position = float4(vertex.position, 0.0, 1.0);
-    output.color = vertex.color;
-
+    Vertex vertex = shaderData->vertices[vertexIndex];
+    output.position = mul(shaderData->projection, mul(shaderData->view, mul(shaderData->model, float4(vertex.position, 1.0))));
+    // output.position = float4(vertex.position, 1.0f);
+    // output.position = mul(shaderData->model, float4(vertex.position, 1.0f));
+    // output.position = mul(shaderData->view, mul(shaderData->model, float4(vertex.position, 1.0f)));
+    output.instanceIndex = instanceIndex;
+    output.uv = vertex.uv;
     return output;
+}
+
+[shader("fragment")]
+float4 fragMain(VSOutput input) {
+    return textures[NonUniformResourceIndex(input.instanceIndex)].Sample(input.uv);
 }

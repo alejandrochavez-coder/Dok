@@ -1,1 +1,1 @@
-slangc demo.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o demo.spv
+slangc demo.slang -target spirv -profile spirv_1_4 -fvk-use-scalar-layout -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o demo.spv
