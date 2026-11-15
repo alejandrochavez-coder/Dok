@@ -89,47 +89,47 @@ typedef struct UniformBuffer {
     VkDeviceAddress vertices;
 } UniformBuffer;
 
-Vertex vertices[] = {
-    (Vertex){
-        .position = (float[]){ 0.0f, -0.5f, 0.0f },
-        .uv = (float[]){ 1.0f, 0.0f }
-    },
-    (Vertex){
-        .position = (float[]){ 0.5f, 0.5f, 0.0f },
-        .uv = (float[]){ 0.0f, 0.0f }
-    },
-    (Vertex){
-        .position = (float[]){ -0.5f, 0.5f, 0.0f },
-        .uv = (float[]){ 0.0f, 1.0f }
-    }
-};
-
-uint16_t indices[] = {
-    0, 1, 2
-};
-
 // Vertex vertices[] = {
 //     (Vertex){
-//         .position = (float[]){ -1.0f, -0.5f, 0.0f },
-//         .uv = (float[]){ 1.0f, 0.0f } 
+//         .position = (float[]){ 0.0f, -0.5f, 0.0f },
+//         .uv = (float[]){ 1.0f, 0.0f }
 //     },
 //     (Vertex){
-//         .position = (float[]){ 0.5f, -1.5f, 0.0f },
+//         .position = (float[]){ 0.5f, 0.5f, 0.0f },
 //         .uv = (float[]){ 0.0f, 0.0f }
 //     },
 //     (Vertex){
-//         .position = (float[]){ -0.5f, 1.5f, 0.0f },
-//         .uv = (float[]){ 0.0f, 1.0f }
-//     },
-//     (Vertex){
-//         .position = (float[]){ 0.0f, 1.5f, 0.0f },
+//         .position = (float[]){ -0.5f, 0.5f, 0.0f },
 //         .uv = (float[]){ 0.0f, 1.0f }
 //     }
 // };
 
 // uint16_t indices[] = {
-//     0, 1, 2, 2, 3, 0
+//     0, 1, 2
 // };
+
+Vertex vertices[] = {
+    (Vertex){
+        .position = (float[]){ -0.5f, -0.5f, 0.0f },
+        .uv = (float[]){ 1.0f, 0.0f } 
+    },
+    (Vertex){
+        .position = (float[]){ 0.5f, -0.5f, 0.0f },
+        .uv = (float[]){ 0.0f, 0.0f }
+    },
+    (Vertex){
+        .position = (float[]){ 0.5f, 0.5f, 0.0f },
+        .uv = (float[]){ 0.0f, 1.0f }
+    },
+    (Vertex){
+        .position = (float[]){ -0.5f, 0.5f, 0.0f },
+        .uv = (float[]){ 1.0f, 1.0f }
+    }
+};
+
+uint16_t indices[] = {
+    0, 1, 2, 2, 3, 0
+};
 
 #ifdef KGL_DEBUG
 VKAPI_ATTR VkBool32 VKAPI_CALL kglDebugCallback(
@@ -1133,18 +1133,9 @@ void kglProcessRenderer(KglRenderer renderer, double deltaTime) {
 
     UniformBuffer ubo = { 0 };
     mat4x4_identity(ubo.model);
-    // mat4x4_rotate(ubo.model, identity, 0.0f, 0.0f, 1.0f, 0);
-    mat4x4_identity(ubo.view);
-    // mat4x4_look_at(ubo.view, (vec3){renderer->elapsedTime, 2.0f, 0.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f});
-    mat4x4_identity(ubo.projection);
-    // mat4x4_perspective(ubo.projection, 0.8, (float)(windowExtent.width) / (float)(windowExtent.height), 0.1, 32.0f);
-    // mat4x4 vulkanCorrection = {
-    //     {1, 0,   0,   0},
-    //     {0, 1,   0,   0},
-    //     {0, 0, 0.5f,  0},
-    //     {0, 0, 0.5f,  1}
-    // };
-    // mat4x4_mul(ubo.projection, vulkanCorrection, ubo.projection);
+    mat4x4_rotate_X(ubo.model, ubo.model, renderer->elapsedTime);
+    mat4x4_translate(ubo.view, 0, 0, 4);
+    mat4x4_perspective(ubo.projection, 0.8, (float)(windowExtent.width) / (float)(windowExtent.height), 0.1, 32.0f);
     ubo.vertices = renderer->vertexBuffer->address;
     kglFrameResourceCopyUniform(frameResource, &ubo);
 
@@ -1314,7 +1305,7 @@ int main() {
             i, VK_API_VERSION_MAJOR(apiVersion), VK_API_VERSION_MINOR(apiVersion), VK_API_VERSION_PATCH(apiVersion), properties.deviceName);
     }
 
-    KglPhysicalDevice physicalDevice = physicalDevices[1];
+    KglPhysicalDevice physicalDevice = physicalDevices[0];
     free(physicalDevices);
 
     const DokWindowCreateInfo windowInfo = {
