@@ -1,7 +1,10 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <dok/dok_vector.h>
 #include <dok/dok_core.h>
+#include <stdio.h>
+#include <stdbool.h>
 #include <windows.h>
+#include "stb_ds.h"
 
 const char* CLASS_NAME = "Dok Window";
 const char* PROP_KEY = "Dok";
@@ -11,6 +14,7 @@ struct DokWindow_T {
     HINSTANCE hinstance;
     DokVector destroyObservers;
     DokVector resizeObservers;
+    DokWindowKeyObserver* keyObservers;
 };
 
 struct DokWindowResizeObserver_T {
@@ -24,6 +28,12 @@ struct DokWindowDestroyObserver_T {
     void* pUserData;
     size_t index;
 };
+
+struct DokWindowKeyObserver_T {
+    PFN_dokWindowKeyObserverCallback pfnCallback;
+    void* pUserData;
+    size_t index;
+}
 
 struct DokVkLoader_T {
     HMODULE dll;
@@ -64,7 +74,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     if (!window) {
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
-
+    wchar_t msg[32];
     switch (uMsg) {
 
     case WM_CLOSE:
@@ -88,6 +98,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         PostQuitMessage(0);
         return 0;
 
+    case WM_KEYDOWN:
+        bool release = (boolean)(HIWORD(lParam) & KF_UP);
+        printf("%d %d\n", (int)(wParam), (int)(release));
+        break;
+
     }
 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -99,7 +114,7 @@ DokResult dokCreateWindow(const DokWindowCreateInfo* pCreateInfo, DokWindow* pOu
         goto exit;
     }
 
-    DokWindow window = (DokWindow) malloc(sizeof(struct DokWindow_T));
+    DokWindow window = (DokWindow) calloc(1, sizeof(struct DokWindow_T));
     if (!window) {
         result = DOK_OUT_OF_HOST_MEMORY;
         goto exit;
@@ -244,6 +259,11 @@ DokResult dokCreateResizeObserver(DokWindow window, const DokWindowResizeObserve
 void dokDestroyResizeObserver(DokWindow window, DokWindowResizeObserver observer) {
     dokVectorRemove(DokWindowDestroyObserver, window->resizeObservers, observer->index);
     free(observer);
+}
+
+DokResult dokCreateWindowKeyObserver(DokWindow window, const DokWindowKeyObserverCreateInfo* pCreateInfo, DokWindowKeyObserver* pOut) {
+    DokWindowKeyObserver observer = malloc(sizeof(struct DokWindowKeyObserver_T));
+    observer->index = arrlen
 }
 
 void dokPollWindow(DokWindow window) {
