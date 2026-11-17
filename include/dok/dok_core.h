@@ -47,26 +47,6 @@ typedef struct DokVulkanInfo {
     VkInstance                  instance;
 } DokVulkanInfo;
 
-typedef enum DokKey {
-    DOK_KEY_A = 0,
-    DOK_KEY_S = 1,
-    DOK_KEY_D = 2,
-    DOK_KEY_W = 3
-} DokKey;
-
-typedef void (*PFN_dokWindowKeyObserverCallback)(
-    DokWindow   window,
-    DokKey      key,
-    void*       pUserData
-);
-
-typedef struct DokWindowKeyObserver_T* DokWindowKeyObserver;
-typedef struct DokWindowKeyObserverCreateInfo {
-    PFN_dokWindowKeyObserverCallback    pfnCallback;
-    void*                               pUserData;
-} DokWindowKeyObserverCreateInfo;
-
-
 void dokGetTime(uint64_t* pOut);
 
 void dokGetTimeFrequency(uint64_t* pOut);
@@ -80,11 +60,6 @@ void dokUnloadVulkan(DokVkLoader loader);
 DokResult dokCreateWindow(
     const DokWindowCreateInfo*  pCreateInfo, 
     DokWindow*                  pOut);
-
-DokResult dokCreateWindowKeyObserver(
-    DokWindow                               window,
-    const DokWindowKeyObserverCreateInfo*   pCreateInfo, 
-    DokWindowKeyObserver*                   pOut);
 
 const char* dokGetPlatformSurfaceExtension();
 

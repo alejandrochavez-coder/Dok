@@ -1,7 +1,7 @@
 #define DOK_VULKAN_TABLES_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_DS_IMPLEMENTATION
-// #define KGL_DEBUG
+#define KGL_DEBUG
 #define TINYGLTF3_IMPLEMENTATION
 
 #include <dok/dok_vulkan_tables.h>
@@ -1209,13 +1209,12 @@ void kglParseTg3Nodes(KglDevice device, const tg3_model* model, const tg3_node* 
     }
     mat4x4_identity(pOut->transform);
     if (node->has_matrix) {
-        for (uint32_t i = 0; i < 16; i++) {
-            pOut->transform[i / 4][i % 4] = node->matrix[i];
-        }
+        memcpy(pOut->transform, node->matrix, sizeof(mat4x4));
+        printf("%f %f %f %f", node->matrix[0], node->matrix[1], node->matrix[2], node->matrix[3]);
     } else {
         mat4x4_translate(pOut->transform, node->translation[0], node->translation[1], node->translation[2]);
     }
-    printf("%f ", pOut->transform[0][0]);
+    memcpy(pOut->positionBuffer->allocationInfo.pMappedData, &pOut->transform, sizeof(mat4x4));
 }
 
 void kglModelFromTg3(KglDevice device, const tg3_model* model, KglNode* pOut) {
@@ -1256,7 +1255,6 @@ void kglModelFromTg3(KglDevice device, const tg3_model* model, KglNode* pOut) {
     }
     const tg3_scene* scene = &model->scenes[model->default_scene];
     pOut->children = NULL;
-    mat4x4_identity(pOut->transform);
     for (uint32_t i = 0; i < scene->nodes_count; i++) {
         KglNode child = { 0 };
         kglParseTg3Nodes(device, model, &model->nodes[scene->nodes[i]], meshesInfo, &child);
@@ -1277,7 +1275,7 @@ void kglDestroyNode(KglNode* pNode) {
 }
 
 typedef struct KglDrawInfo {
-    KglNode node;
+    KglNode* pNode;
     KglTexture texture;
     mat4x4 view;
 } KglDrawInfo;
@@ -1286,34 +1284,34 @@ void kglDraw(KglRenderer renderer, const KglDrawInfo* pInfo) {
     const KglSwapchain swapchain = renderer->swapchain;
     const KglDevice device = renderer->swapchain->device;
     const KglDrawInfo info = *pInfo;
-    const KglNode node = info.node;
-    if (node.model) {
+    const KglNode* pNode = info.pNode;
+    if (pNode->model) {
         KglFrameResource frameResource = renderer->frameResources[renderer->frameIndex];
         VkCommandBuffer commandBuffer = frameResource.commandBuffer;
+        // UniformBuffer ubo = {
+        //     .vertices = pNode->model->vertexBuffer->address,
+        //     .indices = pNode->model->indexBuffer->address
+        // };
         FrameConstants frameConstants = { 0 };
         VkExtent2D windowExtent;
         dokGetWindowExtent(device->window, &windowExtent);
         mat4x4_perspective(frameConstants.projection, 0.8, (float)(windowExtent.width) / (float)(windowExtent.height), 0.1, 32.0f);
         mat4x4_dup(frameConstants.view, info.view);
         kglFrameResourceCopyUniform(&frameResource, &frameConstants);
-        memcpy(node.positionBuffer->allocationInfo.pMappedData, &node.transform, sizeof(mat4x4));
 
         PushConstants pushConstants = {
             .frameConstants = frameResource.uniformBuffer->address,
-            .vertices = node.model->vertexBuffer->address,
-            .indices = node.model->indexBuffer->address,
-            .position = node.positionBuffer->address
+            .vertices = pNode->model->vertexBuffer->address,
+            .indices = pNode->model->indexBuffer->address,
+            .position = pNode->positionBuffer->address
         };
 
         device->table.vkCmdPushConstants(commandBuffer, renderer->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
-        device->table.vkCmdDraw(commandBuffer, node.model->indexCount, 1, 0, 0);
+        device->table.vkCmdDraw(commandBuffer, pNode->model->indexCount, 1, 0, 0);
     }
-    for (uint32_t i = 0; i < arrlen(node.children); i++) {
+    for (uint32_t i = 0; i < arrlen(pNode->children); i++) {
         KglDrawInfo childInfo = *pInfo;
-        childInfo.node = node.children[i];
-        mat4x4_mul(childInfo.node.transform, node.transform, childInfo.node.transform);
-        mat4x4 identity;
-        mat4x4_identity(identity);
+        childInfo.pNode = &pNode->children[i];
         kglDraw(renderer, &childInfo);
     }
 }
@@ -1463,7 +1461,7 @@ int main() {
         printf("Index: %d; Version: %d.%d.%d; %s\n", 
             i, VK_API_VERSION_MAJOR(apiVersion), VK_API_VERSION_MINOR(apiVersion), VK_API_VERSION_PATCH(apiVersion), properties.deviceName);
     }
-    KglPhysicalDevice physicalDevice = physicalDevices[1];
+    KglPhysicalDevice physicalDevice = physicalDevices[0];
     free(physicalDevices);
     const DokWindowCreateInfo windowInfo = {
         .pTitle = "Kgl-Test",
@@ -1515,15 +1513,14 @@ int main() {
     while (exists) {
         kglBeginRendering(renderer);
         KglDrawInfo drawInfo = {
-            .node = node
+            .pNode = &node
         };
         mat4x4_translate(drawInfo.view, 0, 0, 4);
-        mat4x4_rotate_Y(drawInfo.view, drawInfo.view, 3.14);
-        mat4x4_rotate_X(drawInfo.view, drawInfo.view, -pepe);
+        mat4x4_rotate_X(drawInfo.view, drawInfo.view, pepe);
         kglDraw(renderer, &drawInfo);
         kglEndRendering(renderer);
         dokPollWindow(window);
-        pepe += 0.005;
+        pepe += 0.001;
     }
     device->table.vkDeviceWaitIdle(device->handle);
     kglDestroyNode(&node);
