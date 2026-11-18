@@ -103,6 +103,47 @@ LINMATH_H_FUNC void vec4_reflect(vec4 r, vec4 const v, vec4 const n)
 }
 
 typedef vec4 mat4x4[4];
+typedef vec3 mat3x3[3];
+
+LINMATH_H_FUNC void mat3x3_orthonormalize(mat3x3 R, mat3x3 M) {
+    vec3 x, y, z;
+
+    vec3_dup(x, M[0]);
+    vec3_dup(y, M[1]);
+
+    vec3_norm(x, x);
+
+    vec3_scale(y, x, vec3_mul_inner(x, M[1]));
+    vec3_sub(y, M[1], y);
+    vec3_norm(y, y);
+
+    vec3_mul_cross(z, x, y);
+    vec3_norm(z, z);
+
+    vec3_dup(R[0], x);
+    vec3_dup(R[1], y);
+    vec3_dup(R[2], z);
+}
+
+LINMATH_H_FUNC void mat4x4_basis(mat3x3 R, mat4x4 M) {
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			R[i][j] = M[i][j];
+		}
+	}
+	mat3x3_orthonormalize(R, R);
+}
+
+LINMATH_H_FUNC void mat3x3_mul_vec3(vec3 r, mat3x3 const M, vec3 const v)
+{
+	int i, j;
+	for(j=0; j<3; ++j) {
+		r[j] = 0.f;
+		for(i=0; i<3; ++i)
+			r[j] += M[i][j] * v[i];
+	}
+}
+
 LINMATH_H_FUNC void mat4x4_identity(mat4x4 M)
 {
 	int i, j;

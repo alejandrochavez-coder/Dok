@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 
+typedef struct DokWindowMouseMotionObserver_T* DokWindowMouseMotionObserver;
 typedef struct DokWindowDestroyObserver_T* DokWindowDestroyObserver;
 typedef struct DokWindowResizeObserver_T* DokWindowResizeObserver;
 typedef struct DokVkLoader_T* DokVkLoader;
@@ -36,6 +37,18 @@ typedef struct DokWindowDestroyObserverCreateInfo {
     void*                           pUserData;
 } DokWindowDestroyObserverCreateInfo;
 
+typedef void (*PFN_dokWindowMouseMotionCallback)(
+    DokWindow window,
+    double x,
+    double y,
+    void* pUserData
+);
+
+typedef struct DokWindowMouseMotionObserverCreateInfo {
+    PFN_dokWindowMouseMotionCallback    pfnCallback;
+    void*                               pUserData;
+} DokWindowMouseMotionObserverCreateInfo;
+
 typedef struct DokWindowCreateInfo {
     const char*         pTitle;
     uint32_t            height;
@@ -51,21 +64,19 @@ typedef enum DokKey {
     DOK_KEY_A = 0,
     DOK_KEY_S = 1,
     DOK_KEY_D = 2,
-    DOK_KEY_W = 3
+    DOK_KEY_W = 3,
+    DOK_KEY_SPACEBAR = 4
 } DokKey;
 
-typedef void (*PFN_dokWindowKeyObserverCallback)(
-    DokWindow   window,
-    DokKey      key,
-    void*       pUserData
-);
+typedef enum DokKeyState {
+    DOK_KEY_STATE_UNPRESSED = 0,
+    DOK_KEY_STATE_PRESSED = 1,
+    DOK_KEY_STATE_JUST_PRESSED = 3
+} DokKeyState;
 
-typedef struct DokWindowKeyObserver_T* DokWindowKeyObserver;
-typedef struct DokWindowKeyObserverCreateInfo {
-    PFN_dokWindowKeyObserverCallback    pfnCallback;
-    void*                               pUserData;
-} DokWindowKeyObserverCreateInfo;
-
+typedef enum DokCursorState {
+    DOK_CURSOR_STATE_HIDDEN = 0
+} DokCursorState;
 
 void dokGetTime(uint64_t* pOut);
 
@@ -80,11 +91,6 @@ void dokUnloadVulkan(DokVkLoader loader);
 DokResult dokCreateWindow(
     const DokWindowCreateInfo*  pCreateInfo, 
     DokWindow*                  pOut);
-
-DokResult dokCreateWindowKeyObserver(
-    DokWindow                               window,
-    const DokWindowKeyObserverCreateInfo*   pCreateInfo, 
-    DokWindowKeyObserver*                   pOut);
 
 const char* dokGetPlatformSurfaceExtension();
 
@@ -122,4 +128,15 @@ void dokDestroyResizeObserver(
     DokWindow               window,
     DokWindowResizeObserver observer);
 
+DokKeyState dokGetKeyState(
+    DokWindow window,
+    DokKey key
+);
+
+void dokSetCursorState(
+    DokWindow window,
+    DokCursorState state
+);
+
+void dokWindowCreateMouseMotionObserver(DokWindow window, const DokWindowMouseMotionObserverCreateInfo* pCreateInfo, DokWindowMouseMotionObserver* pOut);
 void dokPollWindow(DokWindow window);

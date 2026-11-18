@@ -20,7 +20,11 @@ alignas(uint32_t) const uint8_t spirvShader[] = {
 };
 
 const uint8_t glb[] = {
-    #embed "v1_ultrakill.glb"
+    #embed "xf-09_ares.glb"
+};
+
+const uint8_t tank_data[] = {
+    #embed "tank_low_poly.glb"
 };
 
 typedef struct KglInstance_T* KglInstance;
@@ -1109,8 +1113,9 @@ void kglBeginRendering(KglRenderer renderer) {
     };
     device->table.vkCmdBeginRendering(commandBuffer, &renderingInfo);
     const VkViewport viewport = {
+        .y = windowExtent.height,
         .width = windowExtent.width,
-        .height = windowExtent.height,
+        .height = -(float)windowExtent.height,
         .maxDepth = 1.0f
     };
     const VkRect2D scissor = { .extent = windowExtent };
@@ -1213,7 +1218,7 @@ void kglParseTg3Nodes(KglDevice device, const tg3_model* model, const tg3_node* 
             pOut->transform[i / 4][i % 4] = node->matrix[i];
         }
     } else {
-        mat4x4_translate(pOut->transform, node->translation[0], node->translation[1], node->translation[2]);
+        // mat4x4_translate(pOut->transform, node->translation[0], node->translation[1], node->translation[2]);
     }
     printf("%f ", pOut->transform[0][0]);
 }
@@ -1312,8 +1317,6 @@ void kglDraw(KglRenderer renderer, const KglDrawInfo* pInfo) {
         KglDrawInfo childInfo = *pInfo;
         childInfo.node = node.children[i];
         mat4x4_mul(childInfo.node.transform, node.transform, childInfo.node.transform);
-        mat4x4 identity;
-        mat4x4_identity(identity);
         kglDraw(renderer, &childInfo);
     }
 }
@@ -1463,7 +1466,7 @@ int main() {
         printf("Index: %d; Version: %d.%d.%d; %s\n", 
             i, VK_API_VERSION_MAJOR(apiVersion), VK_API_VERSION_MINOR(apiVersion), VK_API_VERSION_PATCH(apiVersion), properties.deviceName);
     }
-    KglPhysicalDevice physicalDevice = physicalDevices[1];
+    KglPhysicalDevice physicalDevice = physicalDevices[0];
     free(physicalDevices);
     const DokWindowCreateInfo windowInfo = {
         .pTitle = "Kgl-Test",
@@ -1507,19 +1510,102 @@ int main() {
     tg3_model glb_model;
     tg3_parse_glb(&glb_model, NULL, glb, sizeof(glb), NULL, 0, 0);
 
+    tg3_model tank_model;
+    tg3_parse_glb(&tank_model, NULL, tank_data, sizeof(tank_data), NULL, 0, 0);
+
     KglNode node = { 0 };
     kglModelFromTg3(device, &glb_model, &node);
+
+    KglNode tankNode = { 0 };
+    kglModelFromTg3(device, &tank_model, &tankNode);
     tg3_model_free(&glb_model);
+    tg3_model_free(&tank_model);
+
+    mat4x4 transform;
+    mat4x4_identity(transform);
 
     double pepe = 0;
+    uint64_t timeFrequency;
+    uint64_t time;
+    dokGetTimeFrequency(&timeFrequency);
+    dokGetTime(&time);
+    double scale = 1.0 / timeFrequency;
+
+    mat4x4 identity;
+    mat4x4_identity(identity);
+
+    // const DokWindowMouseMotionObserverCreateInfo mouseMotionObserverInfo = {
+    //     .pfnCallback = mouseMotionCallback,
+    //     .pUserData = &transform
+    // };
+    // DokWindowMouseMotionObserver moouseMotionObserver;
+    // dokWindowCreateMouseMotionObserver(window, &mouseMotionObserverInfo, &moouseMotionObserver);
+
+    // dokSetCursorState(window, DOK_CURSOR_STATE_HIDDEN);
+
+    mat4x4 enemyTransform;
+    mat4x4_identity(enemyTransform);
+    // mat4x4_scale(enemyTransform, enemyTransform, 2000.0);
+    mat4x4_translate(enemyTransform, 0, -0.45, 0.3);
+    vec4 velocity;
+
+    int attack = 0;
+
     while (exists) {
+        uint64_t oldTime = time;
+        dokGetTime(&time);
+
+        double deltaTime = (time - oldTime) * scale;
         kglBeginRendering(renderer);
         KglDrawInfo drawInfo = {
             .node = node
         };
-        mat4x4_translate(drawInfo.view, 0, 0, 4);
-        mat4x4_rotate_Y(drawInfo.view, drawInfo.view, 3.14);
-        mat4x4_rotate_X(drawInfo.view, drawInfo.view, -pepe);
+        
+        mat4x4_dup(drawInfo.view, transform);
+        mat4x4_dup(node.transform, enemyTransform);
+
+        mat4x4_rotate_Y(enemyTransform, enemyTransform, deltaTime);
+
+        vec4 inputDirection = { 0 };
+        if (dokGetKeyState(window, DOK_KEY_A) == DOK_KEY_STATE_PRESSED) {
+            inputDirection[0] = -1.0f;
+        }
+        if (dokGetKeyState(window, DOK_KEY_D) == DOK_KEY_STATE_PRESSED) {
+            inputDirection[0] = 1.0f;
+        }
+        if (dokGetKeyState(window, DOK_KEY_W) == DOK_KEY_STATE_PRESSED) {
+            inputDirection[2] = 1.0f;
+        }
+        if (dokGetKeyState(window, DOK_KEY_S) == DOK_KEY_STATE_PRESSED) {
+            inputDirection[2] = -1.0f;
+        }
+
+        mat4x4 basis;
+        mat4x4_orthonormalize(basis, transform);
+
+        vec4 horizontalVelocity = { 0 };
+        mat4x4_mul_vec4(horizontalVelocity, basis, inputDirection);
+        velocity[0] = horizontalVelocity[0];
+        velocity[2] = horizontalVelocity[2];
+        if (transform[3][1] > 0) {
+            velocity[1] = 0;
+            transform[3][1] = 0;
+        }
+        if (transform[3][1] < 0) {
+            velocity[1] -= 20 * deltaTime;
+        }
+        if (dokGetKeyState(window, DOK_KEY_SPACEBAR) == DOK_KEY_STATE_JUST_PRESSED && transform[3][1] == 0) {
+            velocity[1] = 4;
+        }
+        printf("%f\n", velocity[1]);
+
+        if (attack == 0) {
+            vec3 direction = { transform[3][0] - enemyTransform[3][0], transform[3][1] - enemyTransform[3][1], transform[3][2] - enemyTransform[3][2] };
+        }
+
+        vec4 transition;
+        vec4_scale(transition, velocity, deltaTime);
+        mat4x4_translate_in_place(transform, -transition[0], -transition[1], -transition[2]);
         kglDraw(renderer, &drawInfo);
         kglEndRendering(renderer);
         dokPollWindow(window);
@@ -1527,6 +1613,7 @@ int main() {
     }
     device->table.vkDeviceWaitIdle(device->handle);
     kglDestroyNode(&node);
+    kglDestroyNode(&tankNode);
     kglDestroyRenderer(renderer);
     kglDestroySwapchain(swapchain);
     kglDestroyDevice(device);

@@ -9,12 +9,18 @@
 const char* CLASS_NAME = "Dok Window";
 const char* PROP_KEY = "Dok";
 
+typedef struct DokKeyInfo {
+    DokKey key;
+    DokKeyState value;
+} DokKeyInfo;
+
 struct DokWindow_T {
     HWND hwnd;
     HINSTANCE hinstance;
     DokVector destroyObservers;
     DokVector resizeObservers;
-    DokWindowKeyObserver* keyObservers;
+    DokKeyInfo* keyInfos;
+    DokWindowMouseMotionObserver* mouseObservers;
 };
 
 struct DokWindowResizeObserver_T {
@@ -29,11 +35,11 @@ struct DokWindowDestroyObserver_T {
     size_t index;
 };
 
-struct DokWindowKeyObserver_T {
-    PFN_dokWindowKeyObserverCallback pfnCallback;
+struct DokWindowMouseMotionObserver_T {
+    PFN_dokWindowMouseMotionCallback pfnCallback;
     void* pUserData;
     size_t index;
-}
+};
 
 struct DokVkLoader_T {
     HMODULE dll;
@@ -72,9 +78,9 @@ void dokUnloadVulkan(DokVkLoader loader) {
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     DokWindow window = GetProp(hwnd, PROP_KEY);
     if (!window) {
-        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        goto exit;
     }
-    wchar_t msg[32];
+    DokKey key;
     switch (uMsg) {
 
     case WM_CLOSE:
@@ -91,7 +97,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         for (int i = 0; i < window->resizeObservers.length; i++) {
             DokWindowResizeObserver resizeObserver = dokVectorCast(DokWindowResizeObserver, window->resizeObservers.data)[i];
             resizeObserver->pfnCallback(window, width, height, resizeObserver->pUserData);
-        } 
+        }
         break;
 
     case WM_DESTROY:
@@ -99,12 +105,35 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         return 0;
 
     case WM_KEYDOWN:
-        bool release = (boolean)(HIWORD(lParam) & KF_UP);
-        printf("%d %d\n", (int)(wParam), (int)(release));
+        switch (wParam) {
+            case 0x41: key = DOK_KEY_A; break;
+            case 0x53: key = DOK_KEY_S; break;
+            case 0x44: key = DOK_KEY_D; break;
+            case 0x57: key = DOK_KEY_W; break;
+            case 0x20: key = DOK_KEY_SPACEBAR; break;
+            default: goto exit;
+        }
+        hmput(window->keyInfos, key, DOK_KEY_STATE_JUST_PRESSED);
         break;
-
+    case WM_KEYUP:
+        switch (wParam) {
+            case 0x41: key = DOK_KEY_A; break;
+            case 0x53: key = DOK_KEY_S; break;
+            case 0x44: key = DOK_KEY_D; break;
+            case 0x57: key = DOK_KEY_W; break;
+            case 0x20: key = DOK_KEY_SPACEBAR; break;
+            default: goto exit;
+        }
+        hmput(window->keyInfos, key, DOK_KEY_STATE_UNPRESSED);
+        break;
+    case WM_MOUSEMOVE:
+        for (int i = 0; i < arrlen(window->mouseObservers); i++) {
+            window->mouseObservers[i]->pfnCallback(window, LOWORD(lParam), HIWORD(lParam), window->mouseObservers[i]->pUserData);
+        }
+        break;
     }
 
+exit:
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
@@ -261,13 +290,40 @@ void dokDestroyResizeObserver(DokWindow window, DokWindowResizeObserver observer
     free(observer);
 }
 
-DokResult dokCreateWindowKeyObserver(DokWindow window, const DokWindowKeyObserverCreateInfo* pCreateInfo, DokWindowKeyObserver* pOut) {
-    DokWindowKeyObserver observer = malloc(sizeof(struct DokWindowKeyObserver_T));
-    observer->index = arrlen
+DokKeyState dokGetKeyState(
+    DokWindow window,
+    DokKey key
+) {
+    return hmget(window->keyInfos, key);
+}
+
+void dokSetCursorState(
+    DokWindow window,
+    DokCursorState state
+) {
+    if (state == DOK_CURSOR_STATE_HIDDEN) {
+        const RAWINPUTDEVICE rid = { 0x01, 0x02, RIDEV_REMOVE, NULL };
+        RegisterRawInputDevices(&rid, 1, sizeof(rid));
+    }
+}
+
+void dokWindowCreateMouseMotionObserver(DokWindow window, const DokWindowMouseMotionObserverCreateInfo* pCreateInfo, DokWindowMouseMotionObserver* pOut) {
+    DokWindowMouseMotionObserver observer = (DokWindowMouseMotionObserver) malloc(sizeof(struct DokWindowMouseMotionObserver_T));
+    observer->index = window->resizeObservers.length;
+    observer->pfnCallback = pCreateInfo->pfnCallback;
+    observer->pUserData = pCreateInfo->pUserData;
+
+    arrpush(window->mouseObservers, observer);
+    *pOut = observer;
 }
 
 void dokPollWindow(DokWindow window) {
     MSG msg = { 0 };
+    for (int i = 0; i < hmlen(window->keyInfos); i++) {
+        if (window->keyInfos[i].value == DOK_KEY_STATE_JUST_PRESSED) {
+            hmput(window->keyInfos, window->keyInfos[i].key, DOK_KEY_STATE_PRESSED);
+        }
+    }
     while (PeekMessage(&msg, window->hwnd, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
